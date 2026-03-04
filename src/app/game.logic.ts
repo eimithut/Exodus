@@ -1,0 +1,735 @@
+import { signal, computed } from '@angular/core';
+
+export enum Phase {
+  Earth = 'Erde',
+  Orbit = 'Orbit',
+  Exodus = 'Exodus'
+}
+
+export enum GameMode {
+  Classic = 'Klassisch',
+  Board = 'Brettspiel'
+}
+
+export type FieldType = 'start' | 'resources' | 'research' | 'event';
+
+export interface BoardField {
+  type: FieldType;
+  name: string;
+}
+
+export interface Resources {
+  water: number;
+  energy: number;
+  metals: number;
+  research: number;
+}
+
+export interface Technology {
+  id: string;
+  name: string;
+  description: string;
+  cost: Resources;
+  unlocked: boolean;
+}
+
+export type ResourceType = 'water' | 'energy' | 'metals';
+
+export interface Question {
+  text: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export interface PlayerState {
+  id: number;
+  name: string;
+  resources: Resources;
+  phase: Phase;
+  modules: number;
+  isAI: boolean;
+  actionPoints: number;
+  maxActionPoints: number;
+  technologies: Technology[];
+  specialization: ResourceType | null;
+  population: number;
+  usedQuestionIndices: Record<ResourceType | 'research', number[]>;
+  boardPosition: number;
+  color: string;
+}
+
+export interface GameEvent {
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+}
+
+export interface PlayerConfig {
+  name: string;
+  color: string;
+  isAI: boolean;
+}
+
+export class GameLogic {
+  players = signal<PlayerState[]>([]);
+  currentPlayerIndex = signal(0);
+  turnCount = signal(1);
+  eventLog = signal<GameEvent[]>([]);
+  winner = signal<PlayerState | null>(null);
+  gameMode: GameMode;
+  
+  // Board state
+  board: BoardField[] = [
+    { type: 'start', name: 'Start-Basis' },
+    { type: 'resources', name: 'Eis-Vorkommen' },
+    { type: 'resources', name: 'Solar-Array' },
+    { type: 'research', name: 'Bio-Labor' },
+    { type: 'resources', name: 'Metall-Ader' },
+    { type: 'resources', name: 'Wasser-Quelle' },
+    { type: 'research', name: 'Physik-Zentrum' },
+    { type: 'resources', name: 'Energie-Zelle' },
+    { type: 'event', name: 'Weltraum-Anomalie' },
+    { type: 'resources', name: 'Tiefen-Bergbau' },
+    { type: 'resources', name: 'Hydro-Kultur' },
+    { type: 'research', name: 'KI-Kern' },
+    { type: 'resources', name: 'Lithium-Mine' },
+    { type: 'resources', name: 'Reaktor-Block' },
+    { type: 'research', name: 'Material-Test' },
+    { type: 'resources', name: 'Eis-Bohrung' },
+    { type: 'event', name: 'Kometen-Schweif' },
+    { type: 'resources', name: 'Titan-Lager' },
+    { type: 'resources', name: 'Wind-Park' },
+    { type: 'research', name: 'Chemie-Labor' },
+    { type: 'resources', name: 'Oase' },
+    { type: 'resources', name: 'Geothermie' },
+    { type: 'research', name: 'Astro-Physik' },
+    { type: 'resources', name: 'Uran-Depot' },
+    { type: 'event', name: 'Solarer Sturm' },
+    { type: 'resources', name: 'Wasser-Werk' },
+    { type: 'resources', name: 'Batterie-Farm' },
+    { type: 'research', name: 'Gen-Sequenz' },
+    { type: 'resources', name: 'Kupfer-Mine' },
+    { type: 'resources', name: 'Algen-Farm' },
+    { type: 'research', name: 'Quanten-Computer' },
+    { type: 'event', name: 'Meteoriten-Feld' },
+  ];
+
+  lastDiceRoll = signal<number | null>(null);
+  
+  // Question state
+  activeQuestion = signal<{ question: Question; type: ResourceType | 'research' } | null>(null);
+
+  currentPlayer = computed(() => this.players()[this.currentPlayerIndex()]);
+
+  private questions: Record<ResourceType | 'research', Question[]> = {
+    water: [
+      { text: "Wie lautet die chemische Formel für Wasser?", options: ["H2O", "CO2", "HO2", "H2O2"], correctIndex: 0, explanation: "Wasser besteht aus zwei Wasserstoffatomen und einem Sauerstoffatom." },
+      { text: "Was ist die Dichte von reinem Wasser bei 4°C?", options: ["0,5 g/cm³", "1,0 g/cm³", "2,0 g/cm³", "1,5 g/cm³"], correctIndex: 1, explanation: "Wasser hat seine maximale Dichte von 1,0 g/cm³ bei 4°C." },
+      { text: "Bei welcher Temperatur gefriert Wasser (Celsius)?", options: ["-10°C", "0°C", "10°C", "32°C"], correctIndex: 1, explanation: "Reines Wasser gefriert bei 0°C unter normalem atmosphärischem Druck." },
+      { text: "Was ist der Siedepunkt von Wasser auf Meereshöhe?", options: ["90°C", "100°C", "110°C", "120°C"], correctIndex: 1, explanation: "Wasser siedet bei 100°C unter Standarddruck." },
+      { text: "Welcher Anteil der Erdoberfläche ist mit Wasser bedeckt?", options: ["50%", "60%", "71%", "85%"], correctIndex: 2, explanation: "Etwa 71% der Erdoberfläche sind wasserbedeckt." },
+      { text: "Wie nennt man den Übergang von gasförmig zu flüssig?", options: ["Verdampfen", "Kondensieren", "Schmelzen", "Sublimieren"], correctIndex: 1, explanation: "Kondensation ist der Übergang von Gas zu Flüssigkeit." }
+    ],
+    energy: [
+      { text: "Was ist die SI-Einheit der Energie?", options: ["Watt", "Newton", "Joule", "Volt"], correctIndex: 2, explanation: "Das Joule ist die Standardeinheit für Energie." },
+      { text: "Welche dieser Quellen ist eine erneuerbare Energiequelle?", options: ["Kohle", "Erdgas", "Solar", "Atomkraft"], correctIndex: 2, explanation: "Solarenergie wird natürlich regeneriert." },
+      { text: "Was stellt E=mc² dar?", options: ["Energie-Masse-Äquivalenz", "Elektrizität", "Entropie", "Elasticity"], correctIndex: 0, explanation: "Einsteins Formel zeigt, dass Masse in Energie umgewandelt werden kann." },
+      { text: "Was ist die Einheit der elektrischen Leistung?", options: ["Volt", "Ampere", "Ohm", "Watt"], correctIndex: 3, explanation: "Watt (W) ist die Einheit für Leistung." },
+      { text: "Welches Gesetz besagt, dass Energie nicht vernichtet werden kann?", options: ["Newton's Gesetz", "Energieerhaltungssatz", "Ohm'sches Gesetz", "Relativität"], correctIndex: 1, explanation: "Der Energieerhaltungssatz besagt, dass Energie nur umgewandelt werden kann." },
+      { text: "Was ist die Lichtgeschwindigkeit im Vakuum (ca.)?", options: ["300.000 km/s", "150.000 km/s", "1.000.000 km/s", "30.000 km/s"], correctIndex: 0, explanation: "Licht bewegt sich mit ca. 300.000 Kilometern pro Sekunde." }
+    ],
+    metals: [
+      { text: "Was ist das chemische Symbol für Eisen?", options: ["Ir", "Fe", "In", "Au"], correctIndex: 1, explanation: "Fe kommt vom lateinischen Wort 'Ferrum'." },
+      { text: "Welches Metall ist bei Raumtemperatur flüssig?", options: ["Quecksilber", "Blei", "Aluminium", "Kupfer"], correctIndex: 0, explanation: "Quecksilber (Hg) hat einen sehr niedrigen Schmelzpunkt." },
+      { text: "Welches ist das am häufigsten vorkommende Metall in der Erdkruste?", options: ["Eisen", "Gold", "Aluminium", "Silber"], correctIndex: 2, explanation: "Aluminium macht etwa 8% der Erdkruste aus." },
+      { text: "Was ist das chemische Symbol für Gold?", options: ["Gd", "Go", "Au", "Ag"], correctIndex: 2, explanation: "Au kommt vom lateinischen 'Aurum'." },
+      { text: "Aus welchen Metallen besteht Bronze hauptsächlich?", options: ["Eisen & Kohle", "Kupfer & Zinn", "Gold & Silber", "Blei & Zink"], correctIndex: 1, explanation: "Bronze ist eine Legierung aus Kupfer und Zinn." },
+      { text: "Welches Metall leitet Elektrizität am besten?", options: ["Gold", "Kupfer", "Silber", "Aluminium"], correctIndex: 2, explanation: "Silber hat die höchste elektrische Leitfähigkeit aller Metalle." }
+    ],
+    research: [
+      { text: "Wer entwickelte die Relativitätstheorie?", options: ["Isaac Newton", "Albert Einstein", "Marie Curie", "Nikola Tesla"], correctIndex: 1, explanation: "Albert Einstein veröffentlichte die allgemeine Relativitätstheorie im Jahr 1915." },
+      { text: "Was ist der erste Schritt der wissenschaftlichen Methode?", options: ["Experiment", "Hypothese", "Beobachtung", "Schlussfolgerung"], correctIndex: 2, explanation: "Wissenschaft beginnt mit der Beobachtung eines Phänomens." },
+      { text: "Wofür steht DNA?", options: ["Desoxyribonukleinsäure", "Dinukleinsäure", "Digital Network Array", "Deoxygenated Acid"], correctIndex: 0, explanation: "DNA ist das Molekül, das die genetischen Anweisungen trägt." },
+      { text: "Wer entdeckte das Gesetz der Schwerkraft?", options: ["Galileo Galilei", "Isaac Newton", "Charles Darwin", "Stephen Hawking"], correctIndex: 1, explanation: "Newton formulierte das universelle Gravitationsgesetz." },
+      { text: "Wer begründete die Evolutionstheorie?", options: ["Gregor Mendel", "Louis Pasteur", "Charles Darwin", "Thomas Edison"], correctIndex: 2, explanation: "Charles Darwin veröffentlichte 'Über die Entstehung der Arten'." },
+      { text: "Wer erfand das Periodensystem der Elemente?", options: ["Niels Bohr", "Dmitri Mendelejew", "Ernest Rutherford", "Max Planck"], correctIndex: 1, explanation: "Mendelejew ordnete die Elemente nach ihren Eigenschaften." }
+    ]
+  };
+
+  constructor(playerConfigs: PlayerConfig[], mode: GameMode = GameMode.Classic) {
+    this.gameMode = mode;
+    const initialPlayers: PlayerState[] = [];
+    
+    playerConfigs.forEach((config, index) => {
+      initialPlayers.push(this.createPlayer(index + 1, config.name, config.isAI, config.color));
+    });
+
+    this.players.set(initialPlayers);
+    this.addLog({ message: `Spiel gestartet im ${mode}-Modus!`, type: 'info' });
+  }
+
+  private shuffleArray<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
+  private createPlayer(id: number, name: string, isAI: boolean, color: string): PlayerState {
+    return {
+      id,
+      name,
+      resources: { water: 0, energy: 0, metals: 0, research: 0 },
+      phase: Phase.Earth,
+      modules: 0,
+      isAI,
+      actionPoints: 1,
+      maxActionPoints: 1,
+      technologies: [
+        { id: 'mining', name: 'Fortgeschrittener Bergbau', description: '+5 Metalle pro Sammlung', cost: { water: 10, energy: 10, metals: 20, research: 2 }, unlocked: false },
+        { id: 'solar', name: 'Solaranlagen', description: '+5 Energie pro Sammlung', cost: { water: 10, energy: 20, metals: 10, research: 2 }, unlocked: false },
+        { id: 'water', name: 'Wasseraufbereitung', description: '+5 Wasser pro Sammlung', cost: { water: 20, energy: 10, metals: 10, research: 2 }, unlocked: false },
+        { id: 'scanners', name: 'Sprung-Scanner', description: '+1 auf Sprung-Würfe', cost: { water: 30, energy: 30, metals: 30, research: 5 }, unlocked: false }
+      ],
+      specialization: null,
+      population: 10,
+      usedQuestionIndices: { water: [], energy: [], metals: [], research: [] },
+      boardPosition: 0,
+      color
+    };
+  }
+
+  addLog(event: GameEvent) {
+    this.eventLog.update(logs => [event, ...logs].slice(0, 50));
+  }
+
+  setSpecialization(type: ResourceType) {
+    const player = this.currentPlayer();
+    if (player.specialization || player.actionPoints <= 0) return;
+
+    // Check limits
+    const playerCount = this.players().length;
+    const limit = Math.max(1, Math.ceil(playerCount / 2));
+    const count = this.players().filter(p => p.specialization === type).length;
+
+    if (count >= limit) {
+      this.addLog({ message: `Zu viele Spieler sind auf ${type} spezialisiert! Limit ist ${limit}.`, type: 'error' });
+      return;
+    }
+
+    this.updatePlayer(player.id, p => ({ ...p, specialization: type, actionPoints: p.actionPoints - 1 }));
+    this.addLog({ message: `${player.name} hat sich auf ${type.toUpperCase()} spezialisiert!`, type: 'success' });
+  }
+
+  collectResources() {
+    const player = this.currentPlayer();
+    if (this.winner() || player.actionPoints <= 0) return;
+
+    if (!player.specialization) {
+      this.addLog({ message: 'Du musst zuerst eine Spezialisierung wählen!', type: 'error' });
+      return;
+    }
+
+    // Trigger Question
+    const spec = player.specialization as ResourceType;
+    const typeQuestions = this.questions[spec];
+    const availableIndices = typeQuestions.map((_, i) => i).filter(i => !player.usedQuestionIndices[spec].includes(i));
+    
+    let index: number;
+    if (availableIndices.length === 0) {
+      // Reset if all used
+      index = Math.floor(Math.random() * typeQuestions.length);
+      this.updatePlayer(player.id, p => ({ ...p, usedQuestionIndices: { ...p.usedQuestionIndices, [spec]: [] } }));
+    } else {
+      index = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+    }
+
+    this.updatePlayer(player.id, p => ({ 
+      ...p, 
+      usedQuestionIndices: { ...p.usedQuestionIndices, [spec]: [...p.usedQuestionIndices[spec], index] } 
+    }));
+
+    this.activeQuestion.set({ question: typeQuestions[index], type: spec });
+  }
+
+  research() {
+    const player = this.currentPlayer();
+    if (this.winner() || player.actionPoints <= 0) return;
+
+    // Trigger Question
+    const typeQuestions = this.questions.research;
+    const availableIndices = typeQuestions.map((_, i: number) => i).filter((i: number) => !player.usedQuestionIndices.research.includes(i));
+    
+    let index: number;
+    if (availableIndices.length === 0) {
+      index = Math.floor(Math.random() * typeQuestions.length);
+      this.updatePlayer(player.id, p => ({ ...p, usedQuestionIndices: { ...p.usedQuestionIndices, research: [] } }));
+    } else {
+      index = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+    }
+
+    this.updatePlayer(player.id, p => ({ 
+      ...p, 
+      usedQuestionIndices: { ...p.usedQuestionIndices, research: [...p.usedQuestionIndices.research, index] } 
+    }));
+
+    this.activeQuestion.set({ question: typeQuestions[index], type: 'research' });
+  }
+
+  async rollDice() {
+    const player = this.currentPlayer();
+    if (this.winner() || player.actionPoints <= 0 || this.gameMode !== GameMode.Board) return;
+
+    const roll = Math.floor(Math.random() * 6) + 1;
+    this.lastDiceRoll.set(roll);
+    
+    let newPos = player.boardPosition + roll;
+    let passedStart = false;
+    
+    if (newPos >= this.board.length) {
+      newPos = newPos % this.board.length;
+      passedStart = true;
+    }
+
+    this.updatePlayer(player.id, p => ({ 
+      ...p, 
+      boardPosition: newPos,
+      actionPoints: p.actionPoints - 1
+    }));
+
+    this.addLog({ message: `${player.name} hat eine ${roll} gewürfelt und landet auf ${this.board[newPos].name}.`, type: 'info' });
+
+    if (passedStart) {
+      this.updatePlayer(player.id, p => ({
+        ...p,
+        resources: {
+          water: p.resources.water + 5,
+          energy: p.resources.energy + 5,
+          metals: p.resources.metals + 5,
+          research: p.resources.research + 5
+        }
+      }));
+      this.addLog({ message: `${player.name} hat Start passiert! +5 von allen Ressourcen.`, type: 'success' });
+    }
+
+    // Small delay so the user sees the movement before the field action (e.g. question modal)
+    await new Promise(resolve => setTimeout(resolve, 800));
+    this.handleFieldAction(newPos);
+  }
+
+  private handleFieldAction(pos: number) {
+    const field = this.board[pos];
+
+    switch (field.type) {
+      case 'resources':
+        this.collectResourcesBoard();
+        break;
+      case 'research':
+        this.researchBoard();
+        break;
+      case 'event':
+        this.triggerBoardEvent();
+        break;
+      case 'start':
+        // Already handled passing start
+        break;
+    }
+  }
+
+  private collectResourcesBoard() {
+    const player = this.currentPlayer();
+    const baseGain = Math.floor(Math.random() * 4) + 3; // 3-6
+    const spec = player.specialization;
+    
+    const newResources = {
+      water: player.resources.water + baseGain + (spec === 'water' ? 3 : 0),
+      energy: player.resources.energy + baseGain + (spec === 'energy' ? 3 : 0),
+      metals: player.resources.metals + baseGain + (spec === 'metals' ? 3 : 0),
+      research: player.resources.research
+    };
+
+    this.updatePlayer(player.id, p => ({ ...p, resources: newResources }));
+    this.addLog({ message: `${player.name} erhält ${baseGain} von allen Ressourcen${spec ? ' (+3 Bonus)' : ''}.`, type: 'success' });
+  }
+
+  private researchBoard() {
+    const player = this.currentPlayer();
+    const gain = Math.floor(Math.random() * 4) + 3; // 3-6 research points
+    this.updatePlayer(player.id, p => ({
+      ...p,
+      resources: { ...p.resources, research: p.resources.research + gain }
+    }));
+    this.addLog({ message: `${player.name} hat geforscht und ${gain} Forschungspunkte erhalten.`, type: 'success' });
+  }
+
+  private triggerBoardEvent() {
+    const events = [
+      { message: "Meteorschauer! -10 Metalle", action: (p: PlayerState) => ({ ...p, resources: { ...p.resources, metals: Math.max(0, p.resources.metals - 10) } }), type: 'error' as const },
+      { message: "Wasserquelle gefunden! +10 Wasser", action: (p: PlayerState) => ({ ...p, resources: { ...p.resources, water: p.resources.water + 10 } }), type: 'success' as const },
+      { message: "Energieschub! +10 Energie", action: (p: PlayerState) => ({ ...p, resources: { ...p.resources, energy: p.resources.energy + 10 } }), type: 'success' as const },
+      { message: "Datenleck! -5 Forschung", action: (p: PlayerState) => ({ ...p, resources: { ...p.resources, research: Math.max(0, p.resources.research - 5) } }), type: 'error' as const },
+    ];
+
+    const event = events[Math.floor(Math.random() * events.length)];
+    const player = this.currentPlayer();
+    this.updatePlayer(player.id, event.action);
+    this.addLog({ message: `FELD-EREIGNIS: ${event.message}`, type: event.type });
+  }
+
+  answerQuestion(index: number) {
+    const active = this.activeQuestion();
+    if (!active) return;
+
+    const player = this.currentPlayer();
+    const isCorrect = index === active.question.correctIndex;
+    
+    if (isCorrect) {
+      if (active.type === 'research') {
+        const gain = Math.floor(Math.random() * 2) + 2;
+        this.updatePlayer(player.id, p => ({
+          ...p,
+          actionPoints: p.actionPoints - 1,
+          resources: { ...p.resources, research: p.resources.research + gain }
+        }));
+        this.addLog({ message: `Richtig! ${player.name} hat ${gain} Forschungspunkte erhalten.`, type: 'success' });
+      } else {
+        const type = active.type as ResourceType;
+        const hasTech = (id: string) => player.technologies.find(t => t.id === id)?.unlocked;
+        const techBonus = (type === 'water' && hasTech('water')) || 
+                          (type === 'energy' && hasTech('solar')) || 
+                          (type === 'metals' && hasTech('mining')) ? 10 : 0;
+        
+        const mainGain = Math.floor(Math.random() * 15) + 15 + techBonus;
+        const otherGain = Math.floor(Math.random() * 5) + 5; // Collect everything, but less of others
+
+        this.updatePlayer(player.id, p => ({
+          ...p,
+          actionPoints: p.actionPoints - 1,
+          resources: {
+            ...p.resources,
+            water: p.resources.water + (type === 'water' ? mainGain : otherGain),
+            energy: p.resources.energy + (type === 'energy' ? mainGain : otherGain),
+            metals: p.resources.metals + (type === 'metals' ? mainGain : otherGain)
+          }
+        }));
+        this.addLog({ message: `Richtig! ${player.name} hat Ressourcen gesammelt (Bonus auf ${type}).`, type: 'success' });
+      }
+    } else {
+      this.addLog({ message: `Falsch! ${active.question.explanation}`, type: 'error' });
+      this.updatePlayer(player.id, p => ({ ...p, actionPoints: p.actionPoints - 1 }));
+    }
+
+    this.activeQuestion.set(null);
+    this.checkPhaseTransition(player.id);
+  }
+
+
+
+  getResearchUnlockCost(spec: ResourceType): { water: number; energy: number; metals: number } {
+    switch (spec) {
+      case 'water': return { water: 30, metals: 20, energy: 20 };
+      case 'metals': return { water: 20, metals: 30, energy: 20 };
+      case 'energy': return { water: 20, metals: 20, energy: 30 };
+      default: return { water: 25, metals: 25, energy: 25 };
+    }
+  }
+
+  unlockTechnology(techId: string) {
+    const player = this.currentPlayer();
+    if (this.winner() || player.actionPoints <= 0) return;
+
+    // Specialization check for upgrades
+    const techMapping: Record<string, ResourceType | 'research'> = {
+      'mining': 'metals',
+      'solar': 'energy',
+      'water': 'water',
+      'scanners': 'research'
+    };
+
+    if (techMapping[techId] !== (player.specialization || 'research')) {
+      this.addLog({ message: `Du kannst nur Technologien deiner Spezialisierung (${player.specialization || 'Forschung'}) freischalten!`, type: 'error' });
+      return;
+    }
+
+    const tech = player.technologies.find(t => t.id === techId);
+    if (!tech || tech.unlocked) return;
+
+    const canAfford = 
+      player.resources.water >= tech.cost.water &&
+      player.resources.energy >= tech.cost.energy &&
+      player.resources.metals >= tech.cost.metals &&
+      player.resources.research >= tech.cost.research;
+
+    if (!canAfford) {
+      this.addLog({ message: `Nicht genügend Ressourcen, um ${tech.name} freizuschalten!`, type: 'error' });
+      return;
+    }
+
+    this.updatePlayer(player.id, p => ({
+      ...p,
+      actionPoints: p.actionPoints - 1,
+      resources: {
+        water: p.resources.water - tech.cost.water,
+        energy: p.resources.energy - tech.cost.energy,
+        metals: p.resources.metals - tech.cost.metals,
+        research: p.resources.research - tech.cost.research
+      },
+      technologies: p.technologies.map(t => t.id === techId ? { ...t, unlocked: true } : t)
+    }));
+
+    this.addLog({ message: `${player.name} hat die Technologie freigeschaltet: ${tech.name}!`, type: 'success' });
+  }
+
+  buildModule() {
+    const player = this.currentPlayer();
+    if (this.winner() || player.actionPoints <= 0) return;
+
+    if (player.phase !== Phase.Orbit) {
+      this.addLog({ message: 'Du musst in der Orbit-Phase sein, um Module zu bauen!', type: 'error' });
+      return;
+    }
+
+    const cost = 40; // Total resources cost
+    const totalResources = player.resources.water + player.resources.energy + player.resources.metals;
+
+    if (totalResources < cost) {
+      this.addLog({ message: `Nicht genügend Ressourcen! Benötigt werden insgesamt ${cost}.`, type: 'error' });
+      return;
+    }
+
+    // Deduct resources proportionally or just subtract from total
+    let remainingToDeduct = cost;
+    const newResources = { ...player.resources };
+    
+    const deduct = (key: keyof Resources) => {
+      const amount = Math.min(newResources[key], remainingToDeduct);
+      (newResources[key] as number) -= amount;
+      remainingToDeduct -= amount;
+    };
+
+    deduct('metals');
+    deduct('energy');
+    deduct('water');
+
+    this.updatePlayer(player.id, p => ({
+      ...p,
+      actionPoints: p.actionPoints - 1,
+      resources: newResources,
+      modules: p.modules + 1
+    }));
+
+    this.addLog({ message: `${player.name} hat ein Schiffsmodul gebaut! (${player.modules + 1}/3)`, type: 'success' });
+
+    if (player.modules + 1 >= 3) {
+      this.updatePlayer(player.id, p => ({ ...p, phase: Phase.Exodus }));
+      this.addLog({ message: `${player.name} hat Phase 3 erreicht: Exodus! Zeit für den interstellaren Sprung.`, type: 'info' });
+    }
+  }
+
+  interstellarJump() {
+    const player = this.currentPlayer();
+    if (this.winner() || player.actionPoints <= 0) return;
+
+    if (player.phase !== Phase.Exodus) {
+      this.addLog({ message: 'Du musst in der Exodus-Phase sein, um zu springen!', type: 'error' });
+      return;
+    }
+
+    const hasTech = player.technologies.find(t => t.id === 'scanners')?.unlocked;
+    const bonus = hasTech ? 1 : 0;
+
+    const roll = Math.floor(Math.random() * 6) + 1;
+    const totalRoll = roll + bonus;
+    this.addLog({ message: `${player.name} hat eine ${roll}${bonus ? ' (+1 Bonus)' : ''} für den Sprung gewürfelt!`, type: 'info' });
+
+    this.updatePlayer(player.id, p => ({ ...p, actionPoints: p.actionPoints - 1 }));
+
+    if (totalRoll >= 5) {
+      this.winner.set(player);
+      this.addLog({ message: `ERFOLG! ${player.name} hat die Sterne erreicht!`, type: 'success' });
+    } else {
+      this.addLog({ message: `Sprung fehlgeschlagen. Rekalibrierung... Versuche es in der nächsten Runde erneut.`, type: 'warning' });
+    }
+  }
+
+  endTurn() {
+    if (this.winner()) return;
+
+    this.triggerRandomEvent();
+
+    // Reset AP for current player before switching
+    const currentPlayer = this.currentPlayer();
+    
+    // Reproduction and Kid Production
+    const growth = Math.max(1, Math.floor(currentPlayer.population * 0.1));
+    const newPop = currentPlayer.population + growth;
+    
+    // Kids produce 20% of the population's capacity (1 kid = 0.2 resources of each type)
+    const kidProduction = Math.floor(currentPlayer.population * 0.2);
+    
+    this.updatePlayer(currentPlayer.id, p => ({ 
+      ...p, 
+      actionPoints: p.maxActionPoints,
+      population: newPop,
+      resources: {
+        ...p.resources,
+        water: p.resources.water + kidProduction,
+        energy: p.resources.energy + kidProduction,
+        metals: p.resources.metals + kidProduction
+      }
+    }));
+
+    if (kidProduction > 0) {
+      this.addLog({ message: `Bevölkerung wächst (+${growth}). Die nächste Generation produzierte ${kidProduction} von jeder Ressource.`, type: 'info' });
+    }
+
+    const nextIndex = (this.currentPlayerIndex() + 1) % this.players().length;
+    this.currentPlayerIndex.set(nextIndex);
+    
+    if (nextIndex === 0) {
+      this.turnCount.update(t => t + 1);
+    }
+
+    const nextPlayer = this.players()[nextIndex];
+    if (nextPlayer.isAI) {
+      setTimeout(() => this.runAITurn(), 1000);
+    }
+  }
+
+  private triggerRandomEvent() {
+    const events = [
+      { message: "Sonnensturm: -10 Energie", action: (p: PlayerState) => ({ ...p, resources: { ...p.resources, energy: Math.max(0, p.resources.energy - 10) } }), type: 'warning' as const },
+      { message: "Technischer Durchbruch: +5 Forschung", action: (p: PlayerState) => ({ ...p, resources: { ...p.resources, research: p.resources.research + 5 } }), type: 'success' as const },
+      { message: "Meteorschauer: -5 Metalle", action: (p: PlayerState) => ({ ...p, resources: { ...p.resources, metals: Math.max(0, p.resources.metals - 5) } }), type: 'warning' as const },
+      { message: "Effizientes Recycling: +10 Wasser", action: (p: PlayerState) => ({ ...p, resources: { ...p.resources, water: p.resources.water + 10 } }), type: 'success' as const },
+      { message: "Ruhige Runde: Nichts passiert.", action: (p: PlayerState) => p, type: 'info' as const }
+    ];
+
+    if (Math.random() < 0.3) {
+      const event = events[Math.floor(Math.random() * events.length)];
+      const player = this.currentPlayer();
+      this.updatePlayer(player.id, event.action);
+      this.addLog({ message: `EREIGNIS: ${event.message} (Betrifft ${player.name})`, type: event.type });
+    }
+  }
+
+  private checkPhaseTransition(playerId: number) {
+    const player = this.players().find(p => p.id === playerId);
+    if (!player || player.phase !== Phase.Earth) return;
+
+    const totalResources = player.resources.water + player.resources.energy + player.resources.metals;
+    if (totalResources >= 100 && player.resources.research >= 3) {
+      this.updatePlayer(playerId, p => ({ ...p, phase: Phase.Orbit }));
+      this.addLog({ message: `${player.name} hat den Orbit erreicht! Phase 2 beginnt.`, type: 'info' });
+    }
+  }
+
+  updatePlayerColor(id: number, color: string) {
+    this.updatePlayer(id, p => ({ ...p, color }));
+  }
+
+  private updatePlayer(id: number, updater: (p: PlayerState) => PlayerState) {
+    this.players.update(players => players.map(p => p.id === id ? updater(p) : p));
+  }
+
+  private runAITurn() {
+    if (this.winner()) return;
+    const player = this.currentPlayer();
+    
+    if (player.actionPoints > 0) {
+      // AI Specialization
+      if (!player.specialization) {
+        const types: ResourceType[] = ['water', 'energy', 'metals'];
+        const playerCount = this.players().length;
+        const limit = Math.max(1, Math.ceil(playerCount / 2));
+        
+        for (const type of types) {
+          const count = this.players().filter(p => p.specialization === type).length;
+          if (count < limit) {
+            this.setSpecialization(type);
+            break;
+          }
+        }
+        setTimeout(() => this.runAITurn(), 1000);
+        return;
+      }
+
+      if (this.gameMode === GameMode.Board) {
+        this.rollDice().then(() => {
+          const active = this.activeQuestion();
+          if (active) {
+            setTimeout(() => {
+              const isCorrect = Math.random() > 0.3;
+              const index = isCorrect ? active.question.correctIndex : (active.question.correctIndex + 1) % active.question.options.length;
+              this.answerQuestion(index);
+            }, 4000);
+          }
+        });
+      } else {
+        // AI Logic: Try to unlock tech if possible
+        const techMapping: Record<string, ResourceType | 'research'> = {
+          'mining': 'metals',
+          'solar': 'energy',
+          'water': 'water',
+          'scanners': 'research'
+        };
+
+        const affordableTech = player.technologies.find(t => !t.unlocked && 
+          techMapping[t.id] === (player.specialization || 'research') &&
+          player.resources.water >= t.cost.water &&
+          player.resources.energy >= t.cost.energy &&
+          player.resources.metals >= t.cost.metals &&
+          player.resources.research >= t.cost.research
+        );
+
+        if (affordableTech) {
+          this.unlockTechnology(affordableTech.id);
+        } else if (player.phase === Phase.Earth) {
+          this.collectResources();
+          
+          // Auto-answer question for AI after 4 seconds
+          const active = this.activeQuestion();
+          if (active) {
+            setTimeout(() => {
+              const isCorrect = Math.random() > 0.3; // AI is 70% accurate
+              const index = isCorrect ? active.question.correctIndex : (active.question.correctIndex + 1) % active.question.options.length;
+              this.answerQuestion(index);
+            }, 4000);
+          }
+        } else if (player.phase === Phase.Orbit) {
+          const total = player.resources.water + player.resources.energy + player.resources.metals;
+          if (total >= 40) {
+            this.buildModule();
+          } else {
+            this.collectResources();
+            const active = this.activeQuestion();
+            if (active) {
+              setTimeout(() => {
+                const isCorrect = Math.random() > 0.3;
+                const index = isCorrect ? active.question.correctIndex : (active.question.correctIndex + 1) % active.question.options.length;
+                this.answerQuestion(index);
+              }, 4000);
+            }
+          }
+        } else if (player.phase === Phase.Exodus) {
+          this.interstellarJump();
+        }
+      }
+    }
+
+    // Only end turn if no question is pending
+    if (!this.activeQuestion()) {
+      setTimeout(() => this.endTurn(), 1500);
+    } else {
+      // Wait for question to be answered
+      const checkInterval = setInterval(() => {
+        if (!this.activeQuestion()) {
+          clearInterval(checkInterval);
+          this.endTurn();
+        }
+      }, 500);
+    }
+  }
+}

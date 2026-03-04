@@ -1,0 +1,501 @@
+<div class="min-h-screen bg-[#0a0a0f] text-slate-200 font-sans selection:bg-indigo-500/30">
+  
+  <!-- Start Screen -->
+  @if (!gameStarted()) {
+    <div class="flex flex-col items-center justify-center min-h-screen p-6 text-center">
+      <div class="mb-8 space-y-4">
+        <h1 class="text-6xl font-black tracking-tighter uppercase italic text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500">
+          Exodus
+        </h1>
+        <p class="text-xl font-light tracking-widest uppercase text-slate-400">Aufbruch ins Unbekannte</p>
+      </div>
+
+      <div class="w-full max-w-2xl p-8 bg-slate-900/50 border border-slate-800 rounded-3xl backdrop-blur-xl space-y-8">
+        <div class="space-y-6">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+            <h2 class="text-sm font-black uppercase tracking-widest text-slate-500">Besatzung Zusammenstellen</h2>
+            <div class="flex gap-2">
+              <button (click)="addPlayer(false)" [disabled]="setupPlayers().length >= 7" 
+                      class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all">
+                + Spieler
+              </button>
+              <button (click)="addPlayer(true)" [disabled]="setupPlayers().length >= 7" 
+                      class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all">
+                + KI
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            @for (player of setupPlayers(); track $index) {
+              <div class="p-4 bg-slate-950/50 border border-slate-800 rounded-2xl flex flex-col gap-4 group transition-all hover:border-slate-700">
+                <div class="flex items-center gap-4">
+                  <div class="relative group/color">
+                    <div class="w-10 h-10 rounded-xl shadow-lg transition-transform group-hover/color:scale-105" [style.background-color]="player.color"></div>
+                    <div class="absolute top-0 left-12 hidden group-hover/color:flex bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-50 gap-1">
+                      @for (color of availableColors; track color.value) {
+                        <button (click)="updatePlayerColor($index, color.value)" 
+                                [style.background-color]="color.value"
+                                class="w-6 h-6 rounded-lg hover:scale-110 transition-transform border border-white/10"
+                                [title]="color.name">
+                        </button>
+                      }
+                    </div>
+                  </div>
+                  
+                  <div class="flex-1">
+                    <input #nameInput [value]="player.name" (input)="updatePlayerName($index, nameInput.value)"
+                           class="w-full bg-transparent border-none focus:ring-0 text-lg font-bold tracking-tight placeholder:text-slate-700"
+                           placeholder="Name eingeben...">
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <button (click)="toggleAI($index)" 
+                            [class.text-indigo-400]="player.isAI"
+                            [class.text-slate-600]="!player.isAI"
+                            class="p-2 hover:bg-slate-800 rounded-lg transition-all" title="KI Toggle">
+                      <mat-icon>{{ player.isAI ? 'smart_toy' : 'person' }}</mat-icon>
+                    </button>
+                    <button (click)="removePlayer($index)" [disabled]="setupPlayers().length <= 1"
+                            class="p-2 text-slate-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all disabled:opacity-0">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="pt-4 border-t border-slate-800">
+            <span class="text-sm font-semibold uppercase tracking-wider text-slate-500 block mb-4">Spielmodus</span>
+            <div class="grid grid-cols-2 gap-3">
+              <button (click)="selectedMode.set(GameMode.Classic)" 
+                      [class.bg-white]="selectedMode() === GameMode.Classic"
+                      [class.text-black]="selectedMode() === GameMode.Classic"
+                      [class.bg-slate-800]="selectedMode() !== GameMode.Classic"
+                      class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
+                Klassisch
+              </button>
+              <button (click)="selectedMode.set(GameMode.Board)" 
+                      [class.bg-white]="selectedMode() === GameMode.Board"
+                      [class.text-black]="selectedMode() === GameMode.Board"
+                      [class.bg-slate-800]="selectedMode() !== GameMode.Board"
+                      class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
+                Brettspiel
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button (click)="startGame()" class="w-full py-4 bg-white text-black font-bold uppercase tracking-widest rounded-2xl hover:bg-indigo-400 transition-all active:scale-95 shadow-2xl shadow-indigo-500/20">
+          Mission Starten
+        </button>
+      </div>
+    </div>
+  } @else {
+    <!-- Main Game UI -->
+    <div class="flex h-screen overflow-hidden">
+      
+      <!-- Sidebar: Player Stats -->
+      <aside class="w-80 bg-slate-950 border-r border-slate-800 flex flex-col">
+        <div class="p-6 border-b border-slate-800">
+          <h2 class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500 mb-1">Missionskontrolle</h2>
+          <div class="flex items-center justify-between">
+            <span class="text-2xl font-bold tracking-tight">Runde {{ turnCount }}</span>
+            <button (click)="restartGame()" class="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-500">
+              <mat-icon class="text-sm">refresh</mat-icon>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+          @for (player of players; track player.id) {
+            <div [class.ring-2]="player.id === currentPlayer?.id" 
+                 [class.ring-indigo-500]="player.id === currentPlayer?.id"
+                 class="p-4 rounded-2xl bg-slate-900/50 border border-slate-800 transition-all">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  @if (player.id === currentPlayer?.id) {
+                    <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
+                  }
+                  <div class="relative group/color-picker">
+                    <div class="w-6 h-6 rounded-lg cursor-pointer border border-white/20 flex items-center justify-center transition-transform hover:scale-110 shadow-lg" 
+                         [style.background-color]="player.color">
+                      <mat-icon class="text-white/40 !text-[10px]">edit</mat-icon>
+                    </div>
+                    <div class="absolute top-0 left-8 hidden group-hover/color-picker:grid grid-cols-4 bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-50 gap-1 animate-in fade-in slide-in-from-left-2 duration-200">
+                      @for (color of availableColors; track color.value) {
+                        <button (click)="updateGamePlayerColor(player.id, color.value)" 
+                                [style.background-color]="color.value"
+                                class="w-5 h-5 rounded-md hover:scale-110 transition-transform border border-white/10"
+                                [title]="color.name">
+                        </button>
+                      }
+                    </div>
+                  </div>
+                  <span class="font-bold tracking-tight" [style.color]="player.color">
+                    {{ player.name }}
+                  </span>
+                  @if (player.isAI) {
+                    <span class="text-[10px] px-1.5 py-0.5 bg-slate-800 rounded text-slate-500 uppercase font-bold">AI</span>
+                  }
+                </div>
+                <mat-icon class="text-slate-600 text-lg">{{ getPhaseIcon(player.phase) }}</mat-icon>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                <div class="flex items-center gap-1.5">
+                  <mat-icon class="text-blue-400 !text-sm">water_drop</mat-icon>
+                  <span>{{ player.resources.water }}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <mat-icon class="text-yellow-400 !text-sm">bolt</mat-icon>
+                  <span>{{ player.resources.energy }}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <mat-icon class="text-slate-400 !text-sm">architecture</mat-icon>
+                  <span>{{ player.resources.metals }}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <mat-icon class="text-purple-400 !text-sm">science</mat-icon>
+                  <span>{{ player.resources.research }}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <mat-icon class="text-rose-400 !text-sm">groups</mat-icon>
+                  <span>{{ player.population }}</span>
+                </div>
+              </div>
+
+              <div class="mt-3 pt-3 border-t border-slate-800/50 flex items-center justify-between text-[10px] uppercase tracking-wider font-bold text-slate-500">
+                <span>Phase: {{ player.phase }}</span>
+                <span>Module: {{ player.modules }}/3</span>
+              </div>
+            </div>
+          }
+        </div>
+      </aside>
+
+      <!-- Main Action Area -->
+      <main class="flex-1 flex flex-col relative">
+        
+        <!-- Top Bar -->
+        <header class="h-20 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-950/50 backdrop-blur-md">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <mat-icon class="text-white">{{ getPhaseIcon(currentPlayer?.phase) }}</mat-icon>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold uppercase tracking-widest text-slate-500">Aktueller Zug</h3>
+              <p class="text-xl font-bold">{{ currentPlayer?.name }} <span class="text-slate-600">— Phase {{ currentPlayer?.phase }}</span></p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-6">
+            <div class="text-right">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Aktionspunkte</p>
+              <p class="text-lg font-mono font-bold text-indigo-400">
+                {{ currentPlayer?.actionPoints || 0 }}/{{ currentPlayer?.maxActionPoints || 0 }}
+              </p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Gesamtressourcen</p>
+              <p class="text-lg font-mono font-bold">
+                {{ (currentPlayer?.resources?.water || 0) + (currentPlayer?.resources?.energy || 0) + (currentPlayer?.resources?.metals || 0) }}
+              </p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Bevölkerung</p>
+              <p class="text-lg font-mono font-bold text-rose-400">
+                {{ currentPlayer?.population || 0 }}
+              </p>
+            </div>
+            <button (click)="endTurn()" 
+                    [disabled]="currentPlayer?.isAI || !!winner"
+                    class="px-8 py-3 bg-indigo-600 text-white font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-indigo-500/20">
+              Zug Beenden
+            </button>
+          </div>
+        </header>
+
+        <!-- Action Grid -->
+        <div class="flex-1 p-4 grid grid-cols-[1fr_180px] gap-4 overflow-hidden">
+          
+          <!-- Action Buttons Area -->
+          <div class="overflow-y-auto pr-2 space-y-6 custom-scrollbar">
+            
+            <!-- Specialization Selection (If not specialized) -->
+            @if (!currentPlayer?.specialization && !winner) {
+              <div class="bg-slate-900/40 border border-indigo-500/30 rounded-[2rem] p-8 backdrop-blur-md animate-in fade-in zoom-in duration-500">
+                <div class="text-center mb-8">
+                  <h3 class="text-2xl font-black uppercase tracking-tighter text-white mb-2">Spezialisierung Wählen</h3>
+                  <p class="text-slate-400 text-sm">Wähle deine Rolle für diese Mission. Jede Rolle hat einzigartige Fragen und Verantwortlichkeiten.</p>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                  <button (click)="setSpecialization('water')" class="group p-6 bg-slate-950 border border-slate-800 rounded-3xl hover:border-blue-500 transition-all text-center">
+                    <mat-icon class="text-blue-400 !text-4xl mb-3 group-hover:scale-110 transition-transform">water_drop</mat-icon>
+                    <div class="font-black uppercase text-xs tracking-widest text-slate-300">Hydrologe</div>
+                  </button>
+                  <button (click)="setSpecialization('energy')" class="group p-6 bg-slate-950 border border-slate-800 rounded-3xl hover:border-yellow-500 transition-all text-center">
+                    <mat-icon class="text-yellow-400 !text-4xl mb-3 group-hover:scale-110 transition-transform">bolt</mat-icon>
+                    <div class="font-black uppercase text-xs tracking-widest text-slate-300">Ingenieur</div>
+                  </button>
+                  <button (click)="setSpecialization('metals')" class="group p-6 bg-slate-950 border border-slate-800 rounded-3xl hover:border-slate-400 transition-all text-center">
+                    <mat-icon class="text-slate-400 !text-4xl mb-3 group-hover:scale-110 transition-transform">architecture</mat-icon>
+                    <div class="font-black uppercase text-xs tracking-widest text-slate-300">Bergarbeiter</div>
+                  </button>
+                </div>
+              </div>
+            }
+
+            @if (gameMode === GameMode.Board) {
+              <!-- Board Game UI -->
+              <div class="flex flex-col items-center gap-8 py-8">
+                <div class="grid grid-cols-9 grid-rows-9 gap-1.5 w-[600px] h-[600px] relative">
+                  @for (field of board; track $index; let fieldIndex = $index) {
+                    <div [style.grid-column]="(fieldIndex < 9) ? (fieldIndex + 1) : (fieldIndex < 17) ? 9 : (fieldIndex < 25) ? (25 - fieldIndex) : 1"
+                         [style.grid-row]="(fieldIndex < 9) ? 1 : (fieldIndex < 17) ? (fieldIndex - 7) : (fieldIndex < 25) ? 9 : (33 - fieldIndex)"
+                         class="border border-slate-800 bg-slate-900/50 rounded-lg flex flex-col items-center justify-center p-1 relative">
+                      
+                      <!-- Field Content -->
+                      <span class="text-[7px] font-black uppercase tracking-widest text-slate-500 mb-0.5 text-center leading-tight">{{ field.name }}</span>
+                      <mat-icon class="text-slate-400 !text-base">
+                        {{ field.type === 'start' ? 'flag' : field.type === 'resources' ? 'inventory_2' : field.type === 'research' ? 'science' : 'bolt' }}
+                      </mat-icon>
+
+                      <!-- Players on this field -->
+                      <div class="absolute inset-0 pointer-events-none">
+                        @for (player of players; track player.id) {
+                          @if (player.boardPosition === fieldIndex) {
+                            <div class="absolute w-4 h-4 rounded-full border-2 border-white transition-all duration-500"
+                                 [style.background-color]="player.color"
+                                 [style.box-shadow]="'0 0 15px ' + player.color"
+                                 [style.left.%]="15 + ((player.id - 1) % 2) * 40"
+                                 [style.top.%]="15 + (Math.floor((player.id - 1) / 2) % 2) * 40"
+                                 [class.ring-4]="player.id === currentPlayer?.id"
+                                 [class.ring-white/40]="player.id === currentPlayer?.id"
+                                 [class.scale-125]="player.id === currentPlayer?.id"
+                                 [class.z-10]="player.id === currentPlayer?.id"
+                                 [class.animate-pulse]="player.id === currentPlayer?.id">
+                            </div>
+                          }
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+
+                <div class="flex flex-col items-center gap-4">
+                  <button (click)="rollDice()" 
+                          [disabled]="currentPlayer?.isAI || !!winner || (currentPlayer?.actionPoints || 0) <= 0 || !currentPlayer?.specialization"
+                          class="px-12 py-4 bg-indigo-600 text-white font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-500/20 disabled:opacity-50">
+                    Würfeln
+                  </button>
+                  @if (lastDiceRoll) {
+                    <div class="text-4xl font-black text-indigo-400 animate-bounce">{{ lastDiceRoll }}</div>
+                  }
+                </div>
+              </div>
+            } @else {
+              <!-- Classic UI -->
+              <div class="grid grid-cols-2 gap-4">
+                <button (click)="collect()" 
+                        [disabled]="currentPlayer?.isAI || !!winner || (currentPlayer?.actionPoints || 0) <= 0"
+                        class="group relative overflow-hidden min-h-40 p-6 bg-slate-900/40 border border-slate-800 rounded-xl hover:border-blue-500/50 hover:bg-slate-900/60 transition-all text-left disabled:opacity-20 disabled:grayscale">
+                  <div class="flex justify-between items-start mb-4">
+                    <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 group-hover:scale-110 group-hover:bg-blue-500/20 transition-all duration-500">
+                      <mat-icon class="!text-2xl">inventory_2</mat-icon>
+                    </div>
+                    <span class="text-[9px] font-black tracking-widest uppercase bg-blue-500/10 px-2.5 py-1 rounded-md text-blue-400 border border-blue-500/20">1 AP</span>
+                  </div>
+                  <h4 class="text-lg font-black uppercase tracking-tight mb-1 group-hover:text-blue-400 transition-colors">Sammeln</h4>
+                  <p class="text-xs text-slate-400 leading-relaxed">Sammle Ressourcen passend zu deiner Spezialisierung.</p>
+                  <div class="absolute bottom-0 left-0 h-1 bg-blue-500 w-0 group-hover:w-full transition-all duration-700 ease-out"></div>
+                </button>
+
+                <button (click)="research()" 
+                        [disabled]="currentPlayer?.isAI || !!winner || (currentPlayer?.actionPoints || 0) <= 0"
+                        class="group relative overflow-hidden min-h-40 p-6 bg-slate-900/40 border border-slate-800 rounded-xl hover:border-purple-500/50 hover:bg-slate-900/60 transition-all text-left disabled:opacity-20 disabled:grayscale">
+                  <div class="flex justify-between items-start mb-4">
+                    <div class="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 group-hover:scale-110 group-hover:bg-purple-500/20 transition-all duration-500">
+                      <mat-icon class="!text-2xl">science</mat-icon>
+                    </div>
+                    <span class="text-[9px] font-black tracking-widest uppercase bg-purple-500/10 px-2.5 py-1 rounded-md text-purple-400 border border-purple-500/20">1 AP</span>
+                  </div>
+                  <h4 class="text-lg font-black uppercase tracking-tight mb-1 group-hover:text-purple-400 transition-colors">Forschen</h4>
+                  <p class="text-xs text-slate-400 leading-relaxed">Erweitere das wissenschaftliche Wissen.</p>
+                  <div class="absolute bottom-0 left-0 h-1 bg-purple-500 w-0 group-hover:w-full transition-all duration-700 ease-out"></div>
+                </button>
+
+                <button (click)="build()" 
+                        [disabled]="currentPlayer?.isAI || currentPlayer?.phase !== 'Orbit' || !!winner || (currentPlayer?.actionPoints || 0) <= 0"
+                        class="group relative overflow-hidden min-h-40 p-6 bg-slate-900/40 border border-slate-800 rounded-xl hover:border-emerald-500/50 hover:bg-slate-900/60 transition-all text-left disabled:opacity-20 disabled:grayscale">
+                  <div class="flex justify-between items-start mb-4">
+                    <div class="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/20 transition-all duration-500">
+                      <mat-icon class="!text-2xl">build</mat-icon>
+                    </div>
+                    <span class="text-[9px] font-black tracking-widest uppercase bg-emerald-500/10 px-2.5 py-1 rounded-md text-emerald-400 border border-emerald-500/20">1 AP</span>
+                  </div>
+                  <h4 class="text-lg font-black uppercase tracking-tight mb-1 group-hover:text-emerald-400 transition-colors">Bauen</h4>
+                  <p class="text-xs text-slate-400 leading-relaxed">Konstruiere Schiffsmodule im niedrigen Erdorbit.</p>
+                  <div class="absolute bottom-0 left-0 h-1 bg-emerald-500 w-0 group-hover:w-full transition-all duration-700 ease-out"></div>
+                </button>
+
+                <button (click)="jump()" 
+                        [disabled]="currentPlayer?.isAI || currentPlayer?.phase !== 'Exodus' || !!winner || (currentPlayer?.actionPoints || 0) <= 0"
+                        class="group relative overflow-hidden min-h-40 p-6 bg-slate-900/40 border border-slate-800 rounded-xl hover:border-amber-500/50 hover:bg-slate-900/60 transition-all text-left disabled:opacity-20 disabled:grayscale">
+                  <div class="flex justify-between items-start mb-4">
+                    <div class="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400 group-hover:scale-110 group-hover:bg-amber-500/20 transition-all duration-500">
+                      <mat-icon class="!text-2xl">auto_awesome</mat-icon>
+                    </div>
+                    <span class="text-[9px] font-black tracking-widest uppercase bg-amber-500/10 px-2.5 py-1 rounded-md text-amber-400 border border-amber-500/20">1 AP</span>
+                  </div>
+                  <h4 class="text-lg font-black uppercase tracking-tight mb-1 group-hover:text-amber-400 transition-colors">Sprung</h4>
+                  <p class="text-xs text-slate-400 leading-relaxed">Initiiere den finalen interstellaren Aufbruch.</p>
+                  <div class="absolute bottom-0 left-0 h-1 bg-amber-500 w-0 group-hover:w-full transition-all duration-700 ease-out"></div>
+                </button>
+              </div>
+            }
+
+            <!-- Technologies Section -->
+            <div class="bg-slate-900/20 border border-slate-800/50 rounded-[2.5rem] p-8 backdrop-blur-sm">
+              <div class="flex items-center justify-between mb-8">
+                <h3 class="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-3">
+                  <span class="w-8 h-px bg-slate-800"></span>
+                  Technologiebaum
+                </h3>
+              </div>
+              
+              <div class="grid grid-cols-2 gap-4">
+                @for (tech of currentPlayer?.technologies; track tech.id) {
+                  <button (click)="unlockTech(tech.id)"
+                          [disabled]="currentPlayer?.isAI || tech.unlocked || !!winner || (currentPlayer?.actionPoints || 0) <= 0"
+                          class="p-6 rounded-3xl border transition-all text-left group relative overflow-hidden"
+                          [class.bg-slate-950/40]="!tech.unlocked"
+                          [class.border-slate-800]="!tech.unlocked"
+                          [class.bg-emerald-500/5]="tech.unlocked"
+                          [class.border-emerald-500/20]="tech.unlocked"
+                          [class.opacity-40]="!tech.unlocked && ((currentPlayer?.actionPoints || 0) <= 0 || currentPlayer?.isAI)">
+                    
+                    <div class="flex justify-between items-start mb-2">
+                      <span class="font-black uppercase tracking-tight text-sm" [class.text-emerald-400]="tech.unlocked">{{ tech.name }}</span>
+                      @if (tech.unlocked) {
+                        <mat-icon class="text-emerald-500 !text-base">verified</mat-icon>
+                      } @else {
+                        <span class="text-[9px] font-black bg-slate-800 px-2 py-1 rounded-full text-slate-400 border border-slate-700">1 AP</span>
+                      }
+                    </div>
+                    
+                    <p class="text-xs text-slate-500 mb-4 leading-relaxed">{{ tech.description }}</p>
+                    
+                    @if (!tech.unlocked) {
+                      <div class="flex flex-wrap gap-3 pt-3 border-t border-slate-800/50">
+                        <span class="text-[10px] font-mono flex items-center gap-1" [class.text-blue-400]="(currentPlayer?.resources?.water || 0) >= tech.cost.water" [class.text-slate-700]="(currentPlayer?.resources?.water || 0) < tech.cost.water">
+                          <mat-icon class="!text-[12px]">water_drop</mat-icon>{{ tech.cost.water }}
+                        </span>
+                        <span class="text-[10px] font-mono flex items-center gap-1" [class.text-yellow-400]="(currentPlayer?.resources?.energy || 0) >= tech.cost.energy" [class.text-slate-700]="(currentPlayer?.resources?.energy || 0) < tech.cost.energy">
+                          <mat-icon class="!text-[12px]">bolt</mat-icon>{{ tech.cost.energy }}
+                        </span>
+                        <span class="text-[10px] font-mono flex items-center gap-1" [class.text-slate-400]="(currentPlayer?.resources?.metals || 0) >= tech.cost.metals" [class.text-slate-700]="(currentPlayer?.resources?.metals || 0) < tech.cost.metals">
+                          <mat-icon class="!text-[12px]">architecture</mat-icon>{{ tech.cost.metals }}
+                        </span>
+                        <span class="text-[10px] font-mono flex items-center gap-1" [class.text-purple-400]="(currentPlayer?.resources?.research || 0) >= tech.cost.research" [class.text-slate-700]="(currentPlayer?.resources?.research || 0) < tech.cost.research">
+                          <mat-icon class="!text-[12px]">science</mat-icon>{{ tech.cost.research }}
+                        </span>
+                      </div>
+                    }
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- Mission Log (Smaller/Thinner) -->
+          <div class="bg-slate-950/80 border border-slate-800 rounded-[2rem] flex flex-col overflow-hidden backdrop-blur-xl">
+            <div class="p-4 border-b border-slate-800 bg-slate-900/30 flex items-center justify-between">
+              <span class="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Telemetrie</span>
+              <div class="flex gap-1">
+                <div class="w-1 h-1 rounded-full bg-slate-700"></div>
+                <div class="w-1 h-1 rounded-full bg-slate-700"></div>
+              </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-[10px] leading-tight custom-scrollbar">
+              @for (log of eventLog; track $index) {
+                <div class="flex gap-2 animate-in fade-in slide-in-from-right-2 duration-500">
+                  <span class="text-slate-800 font-bold shrink-0">{{ eventLog.length - $index }}</span>
+                  <span [class.text-emerald-400/90]="log.type === 'success'"
+                        [class.text-amber-400/90]="log.type === 'warning'"
+                        [class.text-rose-400/90]="log.type === 'error'"
+                        [class.text-indigo-400/90]="log.type === 'info'">
+                    {{ log.message }}
+                  </span>
+                </div>
+              }
+            </div>
+            <div class="p-3 border-t border-slate-800/50 bg-slate-900/20">
+              <div class="flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-slate-700">
+                <span>Aktiv</span>
+                <span class="animate-pulse">●</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Winner Modal -->
+        @if (winner) {
+          <div class="absolute inset-0 bg-black/80 backdrop-blur-2xl flex items-center justify-center z-50 p-6">
+            <div class="max-w-xl w-full text-center space-y-8 animate-in zoom-in duration-500">
+              <div class="w-32 h-32 bg-indigo-600 rounded-full mx-auto flex items-center justify-center shadow-2xl shadow-indigo-500/50">
+                <mat-icon class="text-white !text-6xl">emoji_events</mat-icon>
+              </div>
+              <div class="space-y-4">
+                <h2 class="text-5xl font-black tracking-tighter uppercase italic">{{ winner.name }} Gewinnt!</h2>
+                <p class="text-xl text-slate-400 font-light">Die Zukunft der Menschheit ist zwischen den Sternen gesichert.</p>
+              </div>
+              <button (click)="restartGame()" class="px-12 py-4 bg-white text-black font-bold uppercase tracking-widest rounded-2xl hover:bg-indigo-400 transition-all active:scale-95">
+                Neue Mission
+              </button>
+            </div>
+          </div>
+        }
+
+      </main>
+    </div>
+  }
+
+  <!-- Question Modal -->
+  @if (activeQuestion; as active) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
+      <div class="bg-slate-900 border border-indigo-500/30 rounded-[3rem] p-10 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-500">
+        <div class="flex items-center gap-4 mb-8">
+          <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+            <mat-icon class="!text-4xl">quiz</mat-icon>
+          </div>
+          <div>
+            <span class="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-400">Missionskritische Daten</span>
+            <h3 class="text-2xl font-black uppercase tracking-tight text-white">{{ active.type }} Analyse</h3>
+          </div>
+        </div>
+
+        <p class="text-xl text-slate-200 mb-10 leading-relaxed font-medium">
+          {{ active.question.text }}
+        </p>
+
+        <div class="grid grid-cols-1 gap-4 mb-8">
+          @for (option of active.question.options; track $index) {
+            <button (click)="answerQuestion($index)" 
+                    class="group p-6 bg-slate-950 border border-slate-800 rounded-2xl hover:border-indigo-500 hover:bg-indigo-500/5 transition-all text-left flex items-center justify-between">
+              <span class="text-slate-300 group-hover:text-white transition-colors">{{ option }}</span>
+              <mat-icon class="text-slate-800 group-hover:text-indigo-500 transition-colors">arrow_forward</mat-icon>
+            </button>
+          }
+        </div>
+
+        <div class="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-600">
+          <mat-icon class="!text-xs">info</mat-icon>
+          Richtige Antworten bringen signifikante Ressourcenboni.
+        </div>
+      </div>
+    </div>
+  }
+
+</div>
