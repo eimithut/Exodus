@@ -276,11 +276,29 @@
                 </div>
 
                 <div class="flex flex-col items-center gap-4">
-                  <button (click)="rollDice()" 
-                          [disabled]="currentPlayer?.isAI || !!winner || (currentPlayer?.actionPoints || 0) <= 0 || !currentPlayer?.specialization"
-                          class="px-12 py-4 bg-indigo-600 text-white font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-500/20 disabled:opacity-50">
-                    Würfeln
-                  </button>
+                  <div class="flex flex-wrap justify-center gap-4">
+                    <button (click)="rollDice()" 
+                            [disabled]="currentPlayer?.isAI || !!winner || (currentPlayer?.actionPoints || 0) <= 0 || !currentPlayer?.specialization"
+                            class="px-12 py-4 bg-indigo-600 text-white font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-500/20 disabled:opacity-50">
+                      Würfeln
+                    </button>
+
+                    @if (currentPlayer?.phase === 'Orbit') {
+                      <button (click)="build()" 
+                              [disabled]="currentPlayer?.isAI || !!winner || (currentPlayer?.actionPoints || 0) <= 0"
+                              class="px-12 py-4 bg-emerald-600 text-white font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-emerald-500 transition-all shadow-2xl shadow-emerald-500/20 disabled:opacity-50">
+                        Modul Bauen
+                      </button>
+                    }
+
+                    @if (currentPlayer?.phase === 'Exodus') {
+                      <button (click)="jump()" 
+                              [disabled]="currentPlayer?.isAI || !!winner || (currentPlayer?.actionPoints || 0) <= 0"
+                              class="px-12 py-4 bg-amber-600 text-white font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-amber-500 transition-all shadow-2xl shadow-amber-500/20 disabled:opacity-50">
+                        Sprung
+                      </button>
+                    }
+                  </div>
                   @if (lastDiceRoll) {
                     <div class="text-4xl font-black text-indigo-400 animate-bounce">{{ lastDiceRoll }}</div>
                   }

@@ -683,16 +683,18 @@ export class GameLogic {
       }
 
       if (this.gameMode === GameMode.Board) {
-        this.rollDice().then(() => {
-          const active = this.activeQuestion();
-          if (active) {
-            setTimeout(() => {
-              const isCorrect = Math.random() > 0.3;
-              const index = isCorrect ? active.question.correctIndex : (active.question.correctIndex + 1) % active.question.options.length;
-              this.answerQuestion(index);
-            }, 4000);
+        if (player.phase === Phase.Exodus) {
+          this.interstellarJump();
+        } else if (player.phase === Phase.Orbit) {
+          const total = player.resources.water + player.resources.energy + player.resources.metals;
+          if (total >= 40) {
+            this.buildModule();
+          } else {
+            this.rollDice().then(() => this.handleAIQuestion());
           }
-        });
+        } else {
+          this.rollDice().then(() => this.handleAIQuestion());
+        }
       } else {
         // AI Logic: Try to unlock tech if possible
         const techMapping: Record<string, ResourceType | 'research'> = {
@@ -714,30 +716,14 @@ export class GameLogic {
           this.unlockTechnology(affordableTech.id);
         } else if (player.phase === Phase.Earth) {
           this.collectResources();
-          
-          // Auto-answer question for AI after 4 seconds
-          const active = this.activeQuestion();
-          if (active) {
-            setTimeout(() => {
-              const isCorrect = Math.random() > 0.3; // AI is 70% accurate
-              const index = isCorrect ? active.question.correctIndex : (active.question.correctIndex + 1) % active.question.options.length;
-              this.answerQuestion(index);
-            }, 4000);
-          }
+          this.handleAIQuestion();
         } else if (player.phase === Phase.Orbit) {
           const total = player.resources.water + player.resources.energy + player.resources.metals;
           if (total >= 40) {
             this.buildModule();
           } else {
             this.collectResources();
-            const active = this.activeQuestion();
-            if (active) {
-              setTimeout(() => {
-                const isCorrect = Math.random() > 0.3;
-                const index = isCorrect ? active.question.correctIndex : (active.question.correctIndex + 1) % active.question.options.length;
-                this.answerQuestion(index);
-              }, 4000);
-            }
+            this.handleAIQuestion();
           }
         } else if (player.phase === Phase.Exodus) {
           this.interstellarJump();
@@ -756,6 +742,17 @@ export class GameLogic {
           this.endTurn();
         }
       }, 500);
+    }
+  }
+
+  private handleAIQuestion() {
+    const active = this.activeQuestion();
+    if (active) {
+      setTimeout(() => {
+        const isCorrect = Math.random() > 0.3; // AI is 70% accurate
+        const index = isCorrect ? active.question.correctIndex : (active.question.correctIndex + 1) % active.question.options.length;
+        this.answerQuestion(index);
+      }, 4000);
     }
   }
 }
