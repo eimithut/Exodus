@@ -16,6 +16,8 @@ export type FieldType = 'start' | 'resources' | 'research' | 'event';
 export interface BoardField {
   type: FieldType;
   name: string;
+  gridCol?: number;
+  gridRow?: number;
 }
 
 export interface Resources {
@@ -77,42 +79,7 @@ export class GameLogic {
   eventLog = signal<GameEvent[]>([]);
   winner = signal<PlayerState | null>(null);
   gameMode: GameMode;
-  
-  // Board state
-  board: BoardField[] = [
-    { type: 'start', name: 'Start-Basis' },
-    { type: 'resources', name: 'Eis-Vorkommen' },
-    { type: 'resources', name: 'Solar-Array' },
-    { type: 'research', name: 'Bio-Labor' },
-    { type: 'resources', name: 'Metall-Ader' },
-    { type: 'resources', name: 'Wasser-Quelle' },
-    { type: 'research', name: 'Physik-Zentrum' },
-    { type: 'resources', name: 'Energie-Zelle' },
-    { type: 'event', name: 'Weltraum-Anomalie' },
-    { type: 'resources', name: 'Tiefen-Bergbau' },
-    { type: 'resources', name: 'Hydro-Kultur' },
-    { type: 'research', name: 'KI-Kern' },
-    { type: 'resources', name: 'Lithium-Mine' },
-    { type: 'resources', name: 'Reaktor-Block' },
-    { type: 'research', name: 'Material-Test' },
-    { type: 'resources', name: 'Eis-Bohrung' },
-    { type: 'event', name: 'Kometen-Schweif' },
-    { type: 'resources', name: 'Titan-Lager' },
-    { type: 'resources', name: 'Wind-Park' },
-    { type: 'research', name: 'Chemie-Labor' },
-    { type: 'resources', name: 'Oase' },
-    { type: 'resources', name: 'Geothermie' },
-    { type: 'research', name: 'Astro-Physik' },
-    { type: 'resources', name: 'Uran-Depot' },
-    { type: 'event', name: 'Solarer Sturm' },
-    { type: 'resources', name: 'Wasser-Werk' },
-    { type: 'resources', name: 'Batterie-Farm' },
-    { type: 'research', name: 'Gen-Sequenz' },
-    { type: 'resources', name: 'Kupfer-Mine' },
-    { type: 'resources', name: 'Algen-Farm' },
-    { type: 'research', name: 'Quanten-Computer' },
-    { type: 'event', name: 'Meteoriten-Feld' },
-  ];
+  board: BoardField[] = [];
 
   lastDiceRoll = signal<number | null>(null);
   
@@ -156,8 +123,10 @@ export class GameLogic {
     ]
   };
 
-  constructor(playerConfigs: PlayerConfig[], mode: GameMode = GameMode.Classic) {
+  constructor(playerConfigs: PlayerConfig[], mode: GameMode = GameMode.Classic, boardSize = 4) {
     this.gameMode = mode;
+    this.generateBoard(boardSize);
+    
     const initialPlayers: PlayerState[] = [];
     
     playerConfigs.forEach((config, index) => {
@@ -166,6 +135,63 @@ export class GameLogic {
 
     this.players.set(initialPlayers);
     this.addLog({ message: `Spiel gestartet im ${mode}-Modus!`, type: 'info' });
+  }
+
+  private generateBoard(size: number) {
+    const totalFields = (size * 4) - 4;
+    const board: BoardField[] = [];
+    
+    const fieldNames = [
+      'Eis-Vorkommen', 'Solar-Array', 'Bio-Labor', 'Metall-Ader', 'Wasser-Quelle', 
+      'Physik-Zentrum', 'Energie-Zelle', 'Tiefen-Bergbau', 'Hydro-Kultur', 'KI-Kern', 
+      'Lithium-Mine', 'Reaktor-Block', 'Material-Test', 'Eis-Bohrung', 'Titan-Lager', 
+      'Wind-Park', 'Chemie-Labor', 'Oase', 'Geothermie', 'Astro-Physik', 
+      'Uran-Depot', 'Wasser-Werk', 'Batterie-Farm', 'Gen-Sequenz', 'Kupfer-Mine', 
+      'Algen-Farm', 'Quanten-Computer'
+    ];
+
+    for (let i = 0; i < totalFields; i++) {
+      let type: FieldType = 'resources';
+      let name = i === 0 ? 'Start-Basis' : fieldNames[(i - 1) % fieldNames.length];
+      
+      if (i === 0) {
+        type = 'start';
+        name = 'Start-Basis';
+      } else {
+        const rand = Math.random();
+        if (rand < 0.1) type = 'event';
+        else if (rand < 0.4) type = 'research';
+      }
+      
+      let gridCol = 1;
+      let gridRow = 1;
+
+      if (i < size) {
+        // Top row (left to right)
+        gridRow = 1;
+        gridCol = i + 1;
+      } else if (i < size + size - 1) {
+        // Right column (top to bottom)
+        gridCol = size;
+        gridRow = (i - size) + 2;
+      } else if (i < size + size - 1 + size - 1) {
+        // Bottom row (right to left)
+        gridRow = size;
+        gridCol = size - (i - (size + size - 1)) - 1;
+      } else {
+        // Left column (bottom to top)
+        gridCol = 1;
+        gridRow = size - (i - (size + size - 1 + size - 1)) - 1;
+      }
+
+      board.push({
+        type,
+        name,
+        gridCol,
+        gridRow
+      });
+    }
+    this.board = board;
   }
 
   private shuffleArray<T>(array: T[]): T[] {

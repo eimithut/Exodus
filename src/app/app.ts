@@ -31,11 +31,8 @@ export class App {
   ]);
 
   selectedMode = signal<GameMode>(GameMode.Classic);
+  selectedBoardSize = signal<number>(4);
   GameMode = GameMode;
-
-  updateGamePlayerColor(playerId: number, color: string) {
-    this.game()?.updatePlayerColor(playerId, color);
-  }
 
   protected readonly Math = Math;
 
@@ -74,6 +71,17 @@ export class App {
     });
   }
 
+  cyclePlayerColor(index: number) {
+    this.setupPlayers.update(players => {
+      const newPlayers = [...players];
+      const currentColor = newPlayers[index].color;
+      const colorIndex = this.availableColors.findIndex(c => c.value === currentColor);
+      const nextColorIndex = (colorIndex + 1) % this.availableColors.length;
+      newPlayers[index] = { ...newPlayers[index], color: this.availableColors[nextColorIndex].value };
+      return newPlayers;
+    });
+  }
+
   toggleAI(index: number) {
     this.setupPlayers.update(players => {
       const newPlayers = [...players];
@@ -85,7 +93,7 @@ export class App {
   }
 
   startGame() {
-    this.game.set(new GameLogic(this.setupPlayers(), this.selectedMode()));
+    this.game.set(new GameLogic(this.setupPlayers(), this.selectedMode(), this.selectedBoardSize()));
     this.gameStarted.set(true);
   }
 
