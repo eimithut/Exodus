@@ -11,6 +11,17 @@ export enum GameMode {
   Board = 'Brettspiel'
 }
 
+export enum MissionLength {
+  Short = 'Kurz',
+  Long = 'Lang'
+}
+
+export enum AIDifficulty {
+  Easy = 'Leicht',
+  Medium = 'Mittel',
+  Hard = 'Schwer'
+}
+
 export type FieldType = 'start' | 'resources' | 'research' | 'event';
 
 export interface BoardField {
@@ -51,6 +62,7 @@ export interface PlayerState {
   phase: Phase;
   modules: number;
   isAI: boolean;
+  aiDifficulty: AIDifficulty;
   actionPoints: number;
   maxActionPoints: number;
   technologies: Technology[];
@@ -70,6 +82,7 @@ export interface PlayerConfig {
   name: string;
   color: string;
   isAI: boolean;
+  aiDifficulty?: AIDifficulty;
 }
 
 export class GameLogic {
@@ -79,6 +92,7 @@ export class GameLogic {
   eventLog = signal<GameEvent[]>([]);
   winner = signal<PlayerState | null>(null);
   gameMode: GameMode;
+  missionLength: MissionLength;
   board: BoardField[] = [];
 
   lastDiceRoll = signal<number | null>(null);
@@ -123,14 +137,15 @@ export class GameLogic {
     ]
   };
 
-  constructor(playerConfigs: PlayerConfig[], mode: GameMode = GameMode.Classic, boardSize = 4) {
+  constructor(playerConfigs: PlayerConfig[], mode: GameMode = GameMode.Classic, boardSize = 4, missionLength: MissionLength = MissionLength.Long) {
     this.gameMode = mode;
+    this.missionLength = missionLength;
     this.generateBoard(boardSize);
     
     const initialPlayers: PlayerState[] = [];
     
     playerConfigs.forEach((config, index) => {
-      initialPlayers.push(this.createPlayer(index + 1, config.name, config.isAI, config.color));
+      initialPlayers.push(this.createPlayer(index + 1, config.name, config.isAI, config.color, config.aiDifficulty));
     });
 
     this.players.set(initialPlayers);
@@ -203,7 +218,7 @@ export class GameLogic {
     return shuffled;
   }
 
-  private createPlayer(id: number, name: string, isAI: boolean, color: string): PlayerState {
+  private createPlayer(id: number, name: string, isAI: boolean, color: string, aiDifficulty: AIDifficulty = AIDifficulty.Medium): PlayerState {
     return {
       id,
       name,
@@ -211,13 +226,16 @@ export class GameLogic {
       phase: Phase.Earth,
       modules: 0,
       isAI,
+      aiDifficulty,
       actionPoints: 1,
       maxActionPoints: 1,
       technologies: [
         { id: 'mining', name: 'Fortgeschrittener Bergbau', description: '+5 Metalle pro Sammlung', cost: { water: 10, energy: 10, metals: 20, research: 2 }, unlocked: false },
         { id: 'solar', name: 'Solaranlagen', description: '+5 Energie pro Sammlung', cost: { water: 10, energy: 20, metals: 10, research: 2 }, unlocked: false },
         { id: 'water', name: 'Wasseraufbereitung', description: '+5 Wasser pro Sammlung', cost: { water: 20, energy: 10, metals: 10, research: 2 }, unlocked: false },
-        { id: 'scanners', name: 'Sprung-Scanner', description: '+1 auf Sprung-Würfe', cost: { water: 30, energy: 30, metals: 30, research: 5 }, unlocked: false }
+        { id: 'space_research', name: 'Weltraumforschung', description: 'Ermöglicht den Bau von Modulen.', cost: { water: 30, energy: 30, metals: 30, research: 5 }, unlocked: false },
+        { id: 'canned_food', name: 'Konservennahrung', description: 'Überlebenswichtig für die lange Reise.', cost: { water: 40, energy: 20, metals: 10, research: 8 }, unlocked: false },
+        { id: 'hyperdrive', name: 'Hyperraumantrieb', description: 'Ermöglicht den interstellaren Sprung.', cost: { water: 20, energy: 50, metals: 40, research: 10 }, unlocked: false }
       ],
       specialization: null,
       population: 10,
@@ -247,6 +265,12 @@ export class GameLogic {
 
     this.updatePlayer(player.id, p => ({ ...p, specialization: type, actionPoints: p.actionPoints - 1 }));
     this.addLog({ message: `${player.name} hat sich auf ${type.toUpperCase()} spezialisiert!`, type: 'success' });
+    
+    if (!this.checkAutoEndTurn()) {
+      if (player.isAI && this.currentPlayer().actionPoints > 0) {
+        setTimeout(() => this.runAITurn(), 1000);
+      }
+    }
   }
 
   collectResources() {
@@ -343,6 +367,8 @@ export class GameLogic {
     // Small delay so the user sees the movement before the field action (e.g. question modal)
     await new Promise(resolve => setTimeout(resolve, 800));
     this.handleFieldAction(newPos);
+    
+    this.checkAutoEndTurn();
   }
 
   private handleFieldAction(pos: number) {
@@ -404,6 +430,15 @@ export class GameLogic {
     this.addLog({ message: `FELD-EREIGNIS: ${event.message}`, type: event.type });
   }
 
+  checkAutoEndTurn(): boolean {
+    const player = this.currentPlayer();
+    if (player.actionPoints <= 0 && !this.activeQuestion() && !this.winner()) {
+      this.endTurn();
+      return true;
+    }
+    return false;
+  }
+
   answerQuestion(index: number) {
     const active = this.activeQuestion();
     if (!active) return;
@@ -449,6 +484,13 @@ export class GameLogic {
 
     this.activeQuestion.set(null);
     this.checkPhaseTransition(player.id);
+    
+    if (!this.checkAutoEndTurn()) {
+      // Continue AI turn if AP > 0
+      if (player.isAI && this.currentPlayer().actionPoints > 0) {
+        setTimeout(() => this.runAITurn(), 1000);
+      }
+    }
   }
 
 
@@ -471,11 +513,21 @@ export class GameLogic {
       'mining': 'metals',
       'solar': 'energy',
       'water': 'water',
-      'scanners': 'research'
+      'space_research': 'research',
+      'canned_food': 'research',
+      'hyperdrive': 'research'
     };
 
-    if (techMapping[techId] !== (player.specialization || 'research')) {
+    // Space research, canned food, and hyperdrive are available for everyone
+    const isGlobalTech = ['space_research', 'canned_food', 'hyperdrive'].includes(techId);
+    if (!isGlobalTech && techMapping[techId] !== (player.specialization || 'research')) {
       this.addLog({ message: `Du kannst nur Technologien deiner Spezialisierung (${player.specialization || 'Forschung'}) freischalten!`, type: 'error' });
+      return;
+    }
+
+    // Check if player has built 3 modules for canned_food and hyperdrive
+    if ((techId === 'canned_food' || techId === 'hyperdrive') && player.modules < 3) {
+      this.addLog({ message: `Du musst zuerst alle 3 Schiffsmodule bauen, um ${techId === 'canned_food' ? 'Konservennahrung' : 'Hyperraumantrieb'} zu erforschen!`, type: 'error' });
       return;
     }
 
@@ -506,14 +558,21 @@ export class GameLogic {
     }));
 
     this.addLog({ message: `${player.name} hat die Technologie freigeschaltet: ${tech.name}!`, type: 'success' });
+    
+    if (!this.checkAutoEndTurn()) {
+      if (player.isAI && this.currentPlayer().actionPoints > 0) {
+        setTimeout(() => this.runAITurn(), 1000);
+      }
+    }
   }
 
   buildModule() {
     const player = this.currentPlayer();
     if (this.winner() || player.actionPoints <= 0) return;
 
-    if (player.phase !== Phase.Orbit) {
-      this.addLog({ message: 'Du musst in der Orbit-Phase sein, um Module zu bauen!', type: 'error' });
+    const hasSpaceResearch = player.technologies.find(t => t.id === 'space_research')?.unlocked;
+    if (player.phase !== Phase.Orbit && !hasSpaceResearch) {
+      this.addLog({ message: 'Du musst in der Orbit-Phase sein oder Weltraumforschung haben, um Module zu bauen!', type: 'error' });
       return;
     }
 
@@ -547,6 +606,12 @@ export class GameLogic {
     }));
 
     this.addLog({ message: `${player.name} hat ein Schiffsmodul gebaut! (${player.modules + 1}/3)`, type: 'success' });
+    
+    if (!this.checkAutoEndTurn()) {
+      if (player.isAI && this.currentPlayer().actionPoints > 0) {
+        setTimeout(() => this.runAITurn(), 1000);
+      }
+    }
 
     if (player.modules + 1 >= 3) {
       this.updatePlayer(player.id, p => ({ ...p, phase: Phase.Exodus }));
@@ -554,29 +619,41 @@ export class GameLogic {
     }
   }
 
-  interstellarJump() {
+  async performJump() {
     const player = this.currentPlayer();
     if (this.winner() || player.actionPoints <= 0) return;
 
-    if (player.phase !== Phase.Exodus) {
-      this.addLog({ message: 'Du musst in der Exodus-Phase sein, um zu springen!', type: 'error' });
+    const hasSpaceResearch = player.technologies.find(t => t.id === 'space_research')?.unlocked;
+    const hasCannedFood = player.technologies.find(t => t.id === 'canned_food')?.unlocked;
+    const hasHyperdrive = player.technologies.find(t => t.id === 'hyperdrive')?.unlocked;
+
+    if (this.missionLength === MissionLength.Long && (!hasCannedFood || !hasHyperdrive)) {
+      this.addLog({ message: 'Du musst zuerst Konservennahrung und den Hyperraumantrieb erforschen!', type: 'error' });
       return;
     }
 
-    const hasTech = player.technologies.find(t => t.id === 'scanners')?.unlocked;
-    const bonus = hasTech ? 1 : 0;
+    let bonus = 0;
+    if (hasSpaceResearch) bonus += 1;
+    if (hasCannedFood) bonus += 1;
+    if (hasHyperdrive) bonus += 1;
 
     const roll = Math.floor(Math.random() * 6) + 1;
     const totalRoll = roll + bonus;
-    this.addLog({ message: `${player.name} hat eine ${roll}${bonus ? ' (+1 Bonus)' : ''} für den Sprung gewürfelt!`, type: 'info' });
+    this.addLog({ message: `${player.name} hat eine ${roll}${bonus ? ' (+' + bonus + ' Bonus)' : ''} für den Sprung gewürfelt!`, type: 'info' });
 
     this.updatePlayer(player.id, p => ({ ...p, actionPoints: p.actionPoints - 1 }));
 
+    // Success threshold is 5, but with full tech (bonus +3), any roll >= 2 succeeds.
     if (totalRoll >= 5) {
       this.winner.set(player);
       this.addLog({ message: `ERFOLG! ${player.name} hat die Sterne erreicht!`, type: 'success' });
     } else {
-      this.addLog({ message: `Sprung fehlgeschlagen. Rekalibrierung... Versuche es in der nächsten Runde erneut.`, type: 'warning' });
+      this.addLog({ message: `SPRUNG FEHLGESCHLAGEN! Die Triebwerke konnten nicht stabilisiert werden. Rekalibrierung läuft...`, type: 'error' });
+      if (!this.checkAutoEndTurn()) {
+        if (player.isAI && this.currentPlayer().actionPoints > 0) {
+          setTimeout(() => this.runAITurn(), 1000);
+        }
+      }
     }
   }
 
@@ -664,6 +741,9 @@ export class GameLogic {
     if (this.winner()) return;
     const player = this.currentPlayer();
     
+    // Safety check: Ensure it's actually an AI turn
+    if (!player.isAI) return;
+    
     if (player.actionPoints > 0) {
       // AI Specialization
       if (!player.specialization) {
@@ -671,77 +751,192 @@ export class GameLogic {
         const playerCount = this.players().length;
         const limit = Math.max(1, Math.ceil(playerCount / 2));
         
-        for (const type of types) {
-          const count = this.players().filter(p => p.specialization === type).length;
-          if (count < limit) {
-            this.setSpecialization(type);
-            break;
+        // Easy AI picks random specialization
+        if (player.aiDifficulty === AIDifficulty.Easy) {
+          const randomType = types[Math.floor(Math.random() * types.length)];
+          this.setSpecialization(randomType);
+        } else {
+          // Medium/Hard AI picks balanced specialization
+          for (const type of types) {
+            const count = this.players().filter(p => p.specialization === type).length;
+            if (count < limit) {
+              this.setSpecialization(type);
+              break;
+            }
           }
         }
         setTimeout(() => this.runAITurn(), 1000);
         return;
       }
 
+      // Difficulty Modifiers
+      const isEasy = player.aiDifficulty === AIDifficulty.Easy;
+      const isHard = player.aiDifficulty === AIDifficulty.Hard;
+
+      // Chance to make a suboptimal move (Easy only)
+      if (isEasy && Math.random() < 0.3) {
+        if (this.gameMode === GameMode.Board) {
+           this.rollDice().then(() => {
+             // Check if it's still this AI's turn
+             if (this.currentPlayer().id !== player.id) return;
+
+             if (this.activeQuestion()) {
+               this.handleAIQuestion();
+             } else if (this.currentPlayer().actionPoints > 0) {
+               setTimeout(() => this.runAITurn(), 1000);
+             }
+           });
+        } else {
+           this.collectResources();
+           if (this.activeQuestion()) {
+             this.handleAIQuestion();
+           } else if (this.currentPlayer().actionPoints > 0) {
+             setTimeout(() => this.runAITurn(), 1000);
+           }
+        }
+        return;
+      }
+
       if (this.gameMode === GameMode.Board) {
-        if (player.phase === Phase.Exodus) {
-          this.interstellarJump();
-        } else if (player.phase === Phase.Orbit) {
+        const hasSpaceResearch = player.technologies.find(t => t.id === 'space_research')?.unlocked;
+        const hasCannedFood = player.technologies.find(t => t.id === 'canned_food')?.unlocked;
+        const hasHyperdrive = player.technologies.find(t => t.id === 'hyperdrive')?.unlocked;
+
+        const readyToJump = this.missionLength === MissionLength.Short ? player.modules === 3 : (hasCannedFood && hasHyperdrive && player.modules === 3);
+
+        if (readyToJump) {
+          this.performJump();
+        } else if (player.modules === 3 && this.missionLength === MissionLength.Long) {
+          // AI Logic: Try to unlock canned food or hyperdrive
+          const nextTech = player.technologies.find(t => !t.unlocked && (t.id === 'canned_food' || t.id === 'hyperdrive'));
+          if (nextTech && 
+              player.resources.water >= nextTech.cost.water &&
+              player.resources.energy >= nextTech.cost.energy &&
+              player.resources.metals >= nextTech.cost.metals &&
+              player.resources.research >= nextTech.cost.research) {
+            this.unlockTechnology(nextTech.id);
+          } else {
+            this.rollDice().then(() => {
+              if (this.currentPlayer().id !== player.id) return;
+              if (this.activeQuestion()) {
+                this.handleAIQuestion();
+              } else if (this.currentPlayer().actionPoints > 0) {
+                setTimeout(() => this.runAITurn(), 1000);
+              }
+            });
+          }
+        } else if (hasSpaceResearch) {
           const total = player.resources.water + player.resources.energy + player.resources.metals;
-          if (total >= 40) {
+          // Hard AI builds sooner (at 30 resources), Easy/Medium at 40
+          const buildThreshold = isHard ? 30 : 40;
+          
+          if (total >= buildThreshold) {
             this.buildModule();
           } else {
-            this.rollDice().then(() => this.handleAIQuestion());
+            this.rollDice().then(() => {
+              if (this.currentPlayer().id !== player.id) return;
+              if (this.activeQuestion()) {
+                this.handleAIQuestion();
+              } else if (this.currentPlayer().actionPoints > 0) {
+                setTimeout(() => this.runAITurn(), 1000);
+              }
+            });
           }
         } else {
-          this.rollDice().then(() => this.handleAIQuestion());
+          // Try to buy space research if possible
+          const spaceTech = player.technologies.find(t => t.id === 'space_research' && !t.unlocked);
+          if (spaceTech && 
+              player.resources.water >= spaceTech.cost.water &&
+              player.resources.energy >= spaceTech.cost.energy &&
+              player.resources.metals >= spaceTech.cost.metals &&
+              player.resources.research >= spaceTech.cost.research) {
+            this.unlockTechnology(spaceTech.id);
+          } else {
+            this.rollDice().then(() => {
+              if (this.currentPlayer().id !== player.id) return;
+              if (this.activeQuestion()) {
+                this.handleAIQuestion();
+              } else if (this.currentPlayer().actionPoints > 0) {
+                setTimeout(() => this.runAITurn(), 1000);
+              }
+            });
+          }
         }
       } else {
+        const hasSpaceResearch = player.technologies.find(t => t.id === 'space_research')?.unlocked;
+        const hasCannedFood = player.technologies.find(t => t.id === 'canned_food')?.unlocked;
+        const hasHyperdrive = player.technologies.find(t => t.id === 'hyperdrive')?.unlocked;
+
         // AI Logic: Try to unlock tech if possible
         const techMapping: Record<string, ResourceType | 'research'> = {
           'mining': 'metals',
           'solar': 'energy',
           'water': 'water',
-          'scanners': 'research'
+          'space_research': 'research',
+          'canned_food': 'research',
+          'hyperdrive': 'research'
         };
 
         const affordableTech = player.technologies.find(t => !t.unlocked && 
-          techMapping[t.id] === (player.specialization || 'research') &&
+          (['space_research', 'canned_food', 'hyperdrive'].includes(t.id) || techMapping[t.id] === (player.specialization || 'research')) &&
           player.resources.water >= t.cost.water &&
           player.resources.energy >= t.cost.energy &&
           player.resources.metals >= t.cost.metals &&
-          player.resources.research >= t.cost.research
+          player.resources.research >= t.cost.research &&
+          ((t.id !== 'canned_food' && t.id !== 'hyperdrive') || player.modules === 3) &&
+          (this.missionLength === MissionLength.Long || (t.id !== 'canned_food' && t.id !== 'hyperdrive'))
         );
 
         if (affordableTech) {
           this.unlockTechnology(affordableTech.id);
-        } else if (player.phase === Phase.Earth) {
-          this.collectResources();
-          this.handleAIQuestion();
-        } else if (player.phase === Phase.Orbit) {
-          const total = player.resources.water + player.resources.energy + player.resources.metals;
-          if (total >= 40) {
+        } else if (player.modules === 3) {
+          const readyToJump = this.missionLength === MissionLength.Short || (hasCannedFood && hasHyperdrive);
+          if (readyToJump) {
+            this.performJump();
+          } else {
+            this.collectResources();
+            if (this.activeQuestion()) {
+              this.handleAIQuestion();
+            } else if (this.currentPlayer().actionPoints > 0) {
+              setTimeout(() => this.runAITurn(), 1000);
+            }
+          }
+        } else if (hasSpaceResearch) {
+          // Hard AI builds aggressively
+          const buildThreshold = isHard ? 30 : 40;
+          const totalResources = player.resources.water + player.resources.energy + player.resources.metals;
+          
+          if (totalResources >= buildThreshold) {
             this.buildModule();
           } else {
             this.collectResources();
-            this.handleAIQuestion();
+            if (this.activeQuestion()) {
+              this.handleAIQuestion();
+            } else if (this.currentPlayer().actionPoints > 0) {
+              setTimeout(() => this.runAITurn(), 1000);
+            }
           }
-        } else if (player.phase === Phase.Exodus) {
-          this.interstellarJump();
+        } else {
+          // Prioritize research for space tech
+          if (player.resources.research < 5) {
+            this.research();
+            if (this.activeQuestion()) {
+              this.handleAIQuestion();
+            } else if (this.currentPlayer().actionPoints > 0) {
+              setTimeout(() => this.runAITurn(), 1000);
+            }
+          } else {
+            this.collectResources();
+            if (this.activeQuestion()) {
+              this.handleAIQuestion();
+            } else if (this.currentPlayer().actionPoints > 0) {
+              setTimeout(() => this.runAITurn(), 1000);
+            }
+          }
         }
       }
-    }
-
-    // Only end turn if no question is pending
-    if (!this.activeQuestion()) {
-      setTimeout(() => this.endTurn(), 1500);
     } else {
-      // Wait for question to be answered
-      const checkInterval = setInterval(() => {
-        if (!this.activeQuestion()) {
-          clearInterval(checkInterval);
-          this.endTurn();
-        }
-      }, 500);
+      this.checkAutoEndTurn();
     }
   }
 
@@ -749,7 +944,13 @@ export class GameLogic {
     const active = this.activeQuestion();
     if (active) {
       setTimeout(() => {
-        const isCorrect = Math.random() > 0.3; // AI is 70% accurate
+        const player = this.currentPlayer();
+        let accuracy = 0.7; // Medium default
+        
+        if (player.aiDifficulty === AIDifficulty.Easy) accuracy = 0.5;
+        if (player.aiDifficulty === AIDifficulty.Hard) accuracy = 0.9;
+
+        const isCorrect = Math.random() < accuracy;
         const index = isCorrect ? active.question.correctIndex : (active.question.correctIndex + 1) % active.question.options.length;
         this.answerQuestion(index);
       }, 4000);

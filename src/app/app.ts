@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
-import { GameLogic, Phase, ResourceType, GameMode, PlayerConfig } from './game.logic';
+import { GameLogic, Phase, ResourceType, GameMode, PlayerConfig, MissionLength, AIDifficulty } from './game.logic';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -27,17 +27,53 @@ export class App {
 
   setupPlayers = signal<PlayerConfig[]>([
     { name: 'Spieler 1', color: '#6366f1', isAI: false },
-    { name: 'KI 1', color: '#ec4899', isAI: true }
+    { name: 'KI 1', color: '#ec4899', isAI: true, aiDifficulty: AIDifficulty.Medium }
   ]);
 
   selectedMode = signal<GameMode>(GameMode.Classic);
   selectedBoardSize = signal<number>(4);
+  selectedMissionLength = signal<MissionLength>(MissionLength.Long);
   GameMode = GameMode;
+  Phase = Phase;
+  MissionLength = MissionLength;
+  AIDifficulty = AIDifficulty;
+
+  // Generate rings for portal animation (denser for wormhole effect)
+  portalRings = Array.from({ length: 30 }, (_, i) => ({
+    delay: i * 0.1,
+    duration: 3
+  }));
+
+  isJumpingLocal = signal(false);
+
+  currentTheme = computed(() => {
+    if (this.game()?.winner()) return 'theme-galaxy';
+    const player = this.game()?.currentPlayer();
+    if (!player) return 'theme-earth';
+    
+    // If player is in Orbit phase OR has space research (which implies capability to be in space)
+    if (player.phase === Phase.Orbit || this.hasSpaceResearch) {
+      return 'theme-orbit';
+    }
+    return 'theme-earth';
+  });
 
   protected readonly Math = Math;
 
   constructor() {
     // Initial game setup
+  }
+
+  async jump() {
+    this.isJumpingLocal.set(true);
+    
+    // Play animation for 6 seconds
+    await new Promise(resolve => setTimeout(resolve, 6000));
+    
+    // Perform jump logic
+    await this.game()?.performJump();
+    
+    this.isJumpingLocal.set(false);
   }
 
   addPlayer(isAI = false) {
@@ -47,7 +83,22 @@ export class App {
     const color = this.availableColors[nextIndex % this.availableColors.length].value;
     const name = isAI ? `KI ${nextIndex + 1}` : `Spieler ${nextIndex + 1}`;
     
-    this.setupPlayers.update(p => [...p, { name, color, isAI }]);
+    this.setupPlayers.update(p => [...p, { name, color, isAI, aiDifficulty: isAI ? AIDifficulty.Medium : undefined }]);
+  }
+
+  cycleAIDifficulty(index: number) {
+    this.setupPlayers.update(players => {
+      const newPlayers = [...players];
+      const current = newPlayers[index].aiDifficulty || AIDifficulty.Medium;
+      let next = AIDifficulty.Medium;
+      
+      if (current === AIDifficulty.Easy) next = AIDifficulty.Medium;
+      else if (current === AIDifficulty.Medium) next = AIDifficulty.Hard;
+      else next = AIDifficulty.Easy;
+      
+      newPlayers[index] = { ...newPlayers[index], aiDifficulty: next };
+      return newPlayers;
+    });
   }
 
   removePlayer(index: number) {
@@ -93,7 +144,7 @@ export class App {
   }
 
   startGame() {
-    this.game.set(new GameLogic(this.setupPlayers(), this.selectedMode(), this.selectedBoardSize()));
+    this.game.set(new GameLogic(this.setupPlayers(), this.selectedMode(), this.selectedBoardSize(), this.selectedMissionLength()));
     this.gameStarted.set(true);
   }
 
@@ -113,13 +164,23 @@ export class App {
   get board() { return this.game()?.board || []; }
   get lastDiceRoll() { return this.game()?.lastDiceRoll(); }
 
+  get hasSpaceResearch() {
+    return this.currentPlayer?.technologies.find(t => t.id === 'space_research')?.unlocked;
+  }
+
+  get hasCannedFood() {
+    return this.currentPlayer?.technologies.find(t => t.id === 'canned_food')?.unlocked;
+  }
+
+  get hasHyperdrive() {
+    return this.currentPlayer?.technologies.find(t => t.id === 'hyperdrive')?.unlocked;
+  }
+
   collect() { this.game()?.collectResources(); }
   research() { this.game()?.research(); }
   build() { this.game()?.buildModule(); }
-  jump() { this.game()?.interstellarJump(); }
   unlockTech(id: string) { this.game()?.unlockTechnology(id); }
   rollDice() { this.game()?.rollDice(); }
-  endTurn() { this.game()?.endTurn(); }
   
   setSpecialization(type: ResourceType) { this.game()?.setSpecialization(type); }
   answerQuestion(index: number) { this.game()?.answerQuestion(index); }
