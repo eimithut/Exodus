@@ -82,118 +82,148 @@
 
   <!-- Start Screen -->
   @if (!gameStarted()) {
-    <div class="flex flex-col items-center justify-center min-h-screen p-6 text-center">
-      <div class="mb-8 space-y-4">
+    <div class="min-h-screen p-6 flex flex-col items-center justify-center">
+      <div class="mb-8 text-center space-y-4">
         <h1 class="text-6xl font-black tracking-tighter uppercase italic text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500">
           Exodus
         </h1>
         <p class="text-xl font-light tracking-widest uppercase text-slate-400">Aufbruch ins Unbekannte</p>
       </div>
 
-      <div class="w-full max-w-2xl p-8 bg-slate-900/50 border border-slate-800 rounded-3xl backdrop-blur-xl space-y-8">
-        <div class="space-y-6">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-4">
-            <h2 class="text-sm font-black uppercase tracking-widest text-slate-500">Besatzung Zusammenstellen</h2>
-            <div class="flex gap-2">
-              <button (click)="addPlayer(false)" [disabled]="setupPlayers().length >= 7" 
-                      class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all">
-                + Spieler
-              </button>
-              <button (click)="addPlayer(true)" [disabled]="setupPlayers().length >= 7" 
-                      class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all">
-                + KI
-              </button>
+      <div class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8">
+        <!-- Main Game Setup -->
+        <div class="p-8 bg-slate-900/50 border border-slate-800 rounded-3xl backdrop-blur-xl space-y-8">
+          <div class="space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h2 class="text-sm font-black uppercase tracking-widest text-slate-500">Besatzung Zusammenstellen</h2>
+              <div class="flex gap-2">
+                <button (click)="addPlayer(false)" [disabled]="setupPlayers().length >= 7" 
+                        class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all">
+                  + Spieler
+                </button>
+                <button (click)="addPlayer(true)" [disabled]="setupPlayers().length >= 7" 
+                        class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all">
+                  + KI
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            @for (player of setupPlayers(); track $index) {
-              <div class="p-4 bg-slate-950/50 border border-slate-800 rounded-2xl flex flex-col gap-3 group transition-all hover:border-slate-700">
-                <div class="flex items-center gap-4">
-                  <button (click)="cyclePlayerColor($index)" 
-                          class="w-10 h-10 rounded-xl shadow-lg border border-white/10 flex-shrink-0 hover:scale-110 transition-transform cursor-pointer" 
-                          [style.background-color]="player.color"
-                          title="Farbe ändern"></button>
-                  
-                  <div class="flex-1">
-                    <input #nameInput [value]="player.name" (input)="updatePlayerName($index, nameInput.value)"
-                           class="w-full bg-transparent border-none focus:ring-0 text-lg font-bold tracking-tight placeholder:text-slate-700 p-0"
-                           placeholder="Name eingeben...">
-                  </div>
+            <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              @for (player of setupPlayers(); track $index) {
+                <div class="p-4 bg-slate-950/50 border border-slate-800 rounded-2xl flex flex-col gap-3 group transition-all hover:border-slate-700">
+                  <div class="flex items-center gap-4">
+                    <button (click)="cyclePlayerColor($index)" 
+                            class="w-10 h-10 rounded-xl shadow-lg border border-white/10 flex-shrink-0 hover:scale-110 transition-transform cursor-pointer" 
+                            [style.background-color]="player.color"
+                            title="Farbe ändern"></button>
+                    
+                    <div class="flex-1">
+                      <input #nameInput [value]="player.name" (input)="updatePlayerName($index, nameInput.value)"
+                             class="w-full bg-transparent border-none focus:ring-0 text-lg font-bold tracking-tight placeholder:text-slate-700 p-0"
+                             placeholder="Name eingeben...">
+                    </div>
 
-                  <div class="flex items-center gap-2">
-                    @if (player.isAI) {
-                      <button (click)="cycleAIDifficulty($index)" 
-                              class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] font-bold uppercase tracking-wider text-slate-400 min-w-[60px]"
-                              title="Schwierigkeit ändern">
-                        {{ player.aiDifficulty || 'Mittel' }}
+                    <div class="flex items-center gap-2">
+                      @if (player.isAI) {
+                        <button (click)="cycleAIDifficulty($index)" 
+                                class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] font-bold uppercase tracking-wider text-slate-400 min-w-[60px]"
+                                title="Schwierigkeit ändern">
+                          {{ player.aiDifficulty || 'Mittel' }}
+                        </button>
+                      }
+                      <button (click)="toggleAI($index)" 
+                              [class.text-indigo-400]="player.isAI"
+                              [class.text-slate-600]="!player.isAI"
+                              class="p-2 hover:bg-slate-800 rounded-lg transition-all" title="KI Toggle">
+                        <mat-icon>{{ player.isAI ? 'smart_toy' : 'person' }}</mat-icon>
                       </button>
-                    }
-                    <button (click)="toggleAI($index)" 
-                            [class.text-indigo-400]="player.isAI"
-                            [class.text-slate-600]="!player.isAI"
-                            class="p-2 hover:bg-slate-800 rounded-lg transition-all" title="KI Toggle">
-                      <mat-icon>{{ player.isAI ? 'smart_toy' : 'person' }}</mat-icon>
-                    </button>
-                    <button (click)="removePlayer($index)" [disabled]="setupPlayers().length <= 1"
-                            class="p-2 text-slate-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all disabled:opacity-0">
-                      <mat-icon>delete</mat-icon>
-                    </button>
+                      <button (click)="removePlayer($index)" [disabled]="setupPlayers().length <= 1"
+                              class="p-2 text-slate-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all disabled:opacity-0">
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    </div>
                   </div>
                 </div>
+              }
+            </div>
+
+            <div class="pt-4 border-t border-slate-800">
+              <span class="text-sm font-semibold uppercase tracking-wider text-slate-500 block mb-4">Spielmodus & Größe</span>
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <button (click)="selectedMode.set(GameMode.Classic)" 
+                        [class.bg-white]="selectedMode() === GameMode.Classic"
+                        [class.text-black]="selectedMode() === GameMode.Classic"
+                        [class.bg-slate-800]="selectedMode() !== GameMode.Classic"
+                        class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
+                  Klassisch
+                </button>
+                <button (click)="selectedMode.set(GameMode.Board)" 
+                        [class.bg-white]="selectedMode() === GameMode.Board"
+                        [class.text-black]="selectedMode() === GameMode.Board"
+                        [class.bg-slate-800]="selectedMode() !== GameMode.Board"
+                        class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
+                  Brettspiel
+                </button>
               </div>
-            }
+              @if (selectedMode() === GameMode.Board) {
+                <div class="flex items-center gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800 mb-4">
+                  <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Größe:</span>
+                  <input type="range" min="4" max="7" [value]="selectedBoardSize()" (input)="selectedBoardSize.set(+$any($event.target).value)" class="flex-1">
+                  <span class="text-sm font-mono font-bold">{{ selectedBoardSize() }}x{{ selectedBoardSize() }}</span>
+                </div>
+              }
+
+              <span class="text-sm font-semibold uppercase tracking-wider text-slate-500 block mb-4">Missions-Länge</span>
+              <div class="grid grid-cols-2 gap-3">
+                <button (click)="selectedMissionLength.set(MissionLength.Short)" 
+                        [class.bg-white]="selectedMissionLength() === MissionLength.Short"
+                        [class.text-black]="selectedMissionLength() === MissionLength.Short"
+                        [class.bg-slate-800]="selectedMissionLength() !== MissionLength.Short"
+                        class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
+                  Kurz
+                </button>
+                <button (click)="selectedMissionLength.set(MissionLength.Long)" 
+                        [class.bg-white]="selectedMissionLength() === MissionLength.Long"
+                        [class.text-black]="selectedMissionLength() === MissionLength.Long"
+                        [class.bg-slate-800]="selectedMissionLength() !== MissionLength.Long"
+                        class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
+                  Lang
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div class="pt-4 border-t border-slate-800">
-            <span class="text-sm font-semibold uppercase tracking-wider text-slate-500 block mb-4">Spielmodus & Größe</span>
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <button (click)="selectedMode.set(GameMode.Classic)" 
-                      [class.bg-white]="selectedMode() === GameMode.Classic"
-                      [class.text-black]="selectedMode() === GameMode.Classic"
-                      [class.bg-slate-800]="selectedMode() !== GameMode.Classic"
-                      class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
-                Klassisch
-              </button>
-              <button (click)="selectedMode.set(GameMode.Board)" 
-                      [class.bg-white]="selectedMode() === GameMode.Board"
-                      [class.text-black]="selectedMode() === GameMode.Board"
-                      [class.bg-slate-800]="selectedMode() !== GameMode.Board"
-                      class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
-                Brettspiel
-              </button>
-            </div>
-            @if (selectedMode() === GameMode.Board) {
-              <div class="flex items-center gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800 mb-4">
-                <span class="text-xs font-bold uppercase tracking-widest text-slate-500">Größe:</span>
-                <input type="range" min="4" max="7" [value]="selectedBoardSize()" (input)="selectedBoardSize.set(+$any($event.target).value)" class="flex-1">
-                <span class="text-sm font-mono font-bold">{{ selectedBoardSize() }}x{{ selectedBoardSize() }}</span>
-              </div>
-            }
-
-            <span class="text-sm font-semibold uppercase tracking-wider text-slate-500 block mb-4">Missions-Länge</span>
-            <div class="grid grid-cols-2 gap-3">
-              <button (click)="selectedMissionLength.set(MissionLength.Short)" 
-                      [class.bg-white]="selectedMissionLength() === MissionLength.Short"
-                      [class.text-black]="selectedMissionLength() === MissionLength.Short"
-                      [class.bg-slate-800]="selectedMissionLength() !== MissionLength.Short"
-                      class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
-                Kurz
-              </button>
-              <button (click)="selectedMissionLength.set(MissionLength.Long)" 
-                      [class.bg-white]="selectedMissionLength() === MissionLength.Long"
-                      [class.text-black]="selectedMissionLength() === MissionLength.Long"
-                      [class.bg-slate-800]="selectedMissionLength() !== MissionLength.Long"
-                      class="py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all">
-                Lang
-              </button>
-            </div>
-          </div>
+          <button (click)="startGame()" class="w-full py-4 bg-white text-black font-bold uppercase tracking-widest rounded-2xl hover:bg-indigo-400 transition-all active:scale-95 shadow-2xl shadow-indigo-500/20">
+            Mission Starten
+          </button>
         </div>
 
-        <button (click)="startGame()" class="w-full py-4 bg-white text-black font-bold uppercase tracking-widest rounded-2xl hover:bg-indigo-400 transition-all active:scale-95 shadow-2xl shadow-indigo-500/20">
-          Mission Starten
-        </button>
+        <!-- Changelog -->
+        <div class="p-8 bg-slate-900/30 border border-slate-800/50 rounded-3xl backdrop-blur-md flex flex-col h-full max-h-[800px]">
+          <div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-800/50">
+            <mat-icon class="text-indigo-400">history</mat-icon>
+            <h2 class="text-sm font-black uppercase tracking-widest text-slate-400">Change Log</h2>
+          </div>
+          <div class="flex-1 overflow-y-auto pr-2 space-y-6 custom-scrollbar text-left">
+            @for (log of changelog; track log.version) {
+              <div class="relative pl-4 border-l-2 border-slate-800">
+                <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-900 border-2 border-indigo-500"></div>
+                <div class="flex items-baseline justify-between mb-2">
+                  <h3 class="text-sm font-bold text-indigo-300">{{ log.version }}</h3>
+                  <span class="text-[10px] font-mono text-slate-500">{{ log.date }}</span>
+                </div>
+                <ul class="space-y-2">
+                  @for (change of log.changes; track $index) {
+                    <li class="text-xs text-slate-400 leading-relaxed flex gap-2">
+                      <span class="text-slate-600 mt-0.5">•</span>
+                      <span>{{ change }}</span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        </div>
       </div>
     </div>
   } @else {

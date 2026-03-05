@@ -46,6 +46,35 @@ export class App {
 
   isJumpingLocal = signal(false);
 
+  changelog = [
+    {
+      version: 'v1.2.0',
+      date: '05.03.2026',
+      changes: [
+        'Neues Changelog in der Lobby hinzugefügt.',
+        'Fehler behoben, bei dem die KI den Zug des menschlichen Spielers im Brettspiel-Modus übernahm.',
+        'Sprunganimation und Siegesbildschirm (Galaxie-Ansicht) vereinheitlicht.',
+        'Die Erfolgschance für den interstellaren Sprung skaliert nun mit erforschten Technologien (+1 Bonus pro Technologie).'
+      ]
+    },
+    {
+      version: 'v1.1.0',
+      date: '05.03.2026',
+      changes: [
+        'Brettspiel-Modus hinzugefügt.',
+        'Wurmloch-Animation für den finalen Sprung implementiert.'
+      ]
+    },
+    {
+      version: 'v1.0.0',
+      date: '04.03.2026',
+      changes: [
+        'Initiale Veröffentlichung von "Mission: Exodus".',
+        'Klassischer Modus mit Ressourcenmanagement und Technologiebaum.'
+      ]
+    }
+  ];
+
   currentTheme = computed(() => {
     if (this.game()?.winner()) return 'theme-galaxy';
     const player = this.game()?.currentPlayer();
