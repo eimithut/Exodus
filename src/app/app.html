@@ -586,6 +586,35 @@
     </div>
   }
 
+  <!-- Lock Screen Overlay -->
+  @if (isLocked()) {
+    <div class="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-3xl flex items-center justify-center overflow-hidden select-none animate-in fade-in duration-500 outline-none">
+      <div class="absolute inset-0 pointer-events-none">
+        @for (i of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]; track i) {
+          <div class="absolute text-8xl font-black text-white/5 whitespace-nowrap animate-crazy-float"
+               [style.left.%]="(i * 17) % 100"
+               [style.top.%]="(i * 23) % 100"
+               [style.animation-delay.s]="i * -1.5"
+               [style.animation-duration.s]="8 + (i % 5) * 2">
+            LECK EI
+          </div>
+        }
+      </div>
+      <div class="relative z-10 flex flex-col items-center gap-6 text-center px-4">
+        <div class="relative">
+          <h1 class="text-8xl sm:text-9xl font-black italic tracking-tighter text-white animate-bounce-slow drop-shadow-[0_0_50px_rgba(255,255,255,0.3)]">
+            LECK EI
+          </h1>
+          <div class="absolute -inset-4 bg-white/10 blur-3xl -z-10 rounded-full animate-pulse"></div>
+        </div>
+        <div class="space-y-2">
+          <p class="text-slate-500 font-mono uppercase tracking-[1em] text-xs animate-pulse">System gesperrt</p>
+          <p class="text-slate-700 text-[10px] uppercase tracking-widest">Klicken zum Entsperren</p>
+        </div>
+      </div>
+    </div>
+  }
+
   <!-- Question Modal -->
   @if (activeQuestion; as active) {
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">

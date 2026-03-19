@@ -45,8 +45,25 @@ export class App {
   }));
 
   isJumpingLocal = signal(false);
+  isLocked = signal(true);
 
   changelog = [
+    {
+      version: 'v1.4.0',
+      date: '19.03.2026',
+      changes: [
+        'System dauerhaft gesperrt.',
+        'Spielbetrieb eingestellt.'
+      ]
+    },
+    {
+      version: 'v1.3.0',
+      date: '19.03.2026',
+      changes: [
+        'Sperrbildschirm ("Leck Ei") mit verrückten Animationen hinzugefügt.',
+        'Sperr-Button in der Lobby und in der Missionskontrolle implementiert.'
+      ]
+    },
     {
       version: 'v1.2.0',
       date: '05.03.2026',
@@ -103,6 +120,10 @@ export class App {
     await this.game()?.performJump();
     
     this.isJumpingLocal.set(false);
+  }
+
+  toggleLock() {
+    // Permanently locked
   }
 
   addPlayer(isAI = false) {

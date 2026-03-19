@@ -3,6 +3,27 @@
   transition: background 2s ease-in-out;
 }
 
+@keyframes crazy-float {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(100px, 50px) rotate(5deg); }
+  50% { transform: translate(50px, 150px) rotate(-5deg); }
+  75% { transform: translate(-50px, 50px) rotate(3deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+.animate-crazy-float {
+  animation: crazy-float 10s ease-in-out infinite;
+}
+
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(-10%) scale(1.05); }
+  50% { transform: translateY(0) scale(1); }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 4s ease-in-out infinite;
+}
+
 /* Earth Theme: Deep Blue/Green Atmosphere */
 .theme-earth {
   background: radial-gradient(circle at 50% 120%, #1e3a8a 0%, #0f172a 40%, #020617 100%);
